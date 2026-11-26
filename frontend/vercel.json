@@ -2,12 +2,72 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/api/auth/:path*",
-      "destination": "/api/proxy?__api_path=auth/:path*"
+      "source": "/api/auth/nonce",
+      "destination": "https://bluff-royale-kuuq.onrender.com/auth/nonce"
     },
     {
-      "source": "/api/games/:path*",
-      "destination": "/api/proxy?__api_path=games/:path*"
+      "source": "/api/auth/google",
+      "destination": "https://bluff-royale-kuuq.onrender.com/auth/google"
+    },
+    {
+      "source": "/api/auth/me/matches",
+      "destination": "https://bluff-royale-kuuq.onrender.com/auth/me/matches"
+    },
+    {
+      "source": "/api/auth/me",
+      "destination": "https://bluff-royale-kuuq.onrender.com/auth/me"
+    },
+    {
+      "source": "/api/auth/logout",
+      "destination": "https://bluff-royale-kuuq.onrender.com/auth/logout"
+    },
+    {
+      "source": "/api/games",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games"
+    },
+    {
+      "source": "/api/games/:gameId/join",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/join"
+    },
+    {
+      "source": "/api/games/:gameId/start",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/start"
+    },
+    {
+      "source": "/api/games/:gameId/state",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/state"
+    },
+    {
+      "source": "/api/games/:gameId/play",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/play"
+    },
+    {
+      "source": "/api/games/:gameId/skip",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/skip"
+    },
+    {
+      "source": "/api/games/:gameId/close-round",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/close-round"
+    },
+    {
+      "source": "/api/games/:gameId/challenge",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/challenge"
+    },
+    {
+      "source": "/api/games/:gameId/pause",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/pause"
+    },
+    {
+      "source": "/api/games/:gameId/resume",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/resume"
+    },
+    {
+      "source": "/api/games/:gameId/emote",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/emote"
+    },
+    {
+      "source": "/api/games/:gameId",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId"
     }
   ]
 }

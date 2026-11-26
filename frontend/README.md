@@ -8,7 +8,7 @@ Designed for the authenticated Bluff Royale API.
 2. Run `npm ci`.
 3. Run `npm run dev`.
 
-In production, add the server-only Vercel environment variable `BLUFF_API_ORIGIN` with the HTTPS origin of the Render API (for example `https://your-api.onrender.com`). The browser talks to the same-origin Vercel `/api` proxy, which forwards only the app's auth and game routes, including the HttpOnly session cookie. `vercel.json` rewrites nested auth and game paths to the proxy function. Set `VITE_GOOGLE_CLIENT_ID` to the Google OAuth web client ID; its authorized JavaScript origin must include the deployed Vercel origin. On Render, set the exact deployed frontend origin in `FRONTEND_URL` and use the same client ID for `GOOGLE_CLIENT_ID`.
+In production, Vercel rewrites the app's same-origin `/api` auth and game routes directly to the HTTPS Render API. This avoids cross-origin browser cookies while keeping the session cookie HttpOnly and scoped to the deployed frontend origin. Set `VITE_GOOGLE_CLIENT_ID` to the Google OAuth web client ID; its authorized JavaScript origin must include the deployed Vercel origin. On Render, set the exact deployed frontend origin in `FRONTEND_URL` and use the same client ID for `GOOGLE_CLIENT_ID`.
 
 For local development, Vite proxies `/api` to `VITE_API_URL` (default `http://localhost:8000`). The app-session cookie is HttpOnly, Secure in production, and SameSite=Lax.
 
