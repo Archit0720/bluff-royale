@@ -4,7 +4,14 @@ from dataclasses import asdict
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .auth_routes import current_identity
-from .schemas import ActionRequest, DialogueRequest, EmoteRequest, NameRequest, PlayRequest
+from .schemas import (
+    ActionRequest,
+    CreateRoomRequest,
+    DialogueRequest,
+    EmoteRequest,
+    NameRequest,
+    PlayRequest,
+)
 
 router = APIRouter(prefix="/games", tags=["games"])
 
@@ -60,7 +67,7 @@ def active_game(room):
 
 @router.post("")
 async def create(
-    body: NameRequest,
+    body: CreateRoomRequest,
     request: Request,
     identity=Depends(current_identity),
 ):
@@ -70,6 +77,7 @@ async def create(
             body.player_name,
             identity.user_id,
             profile,
+            body.deck_count,
         )
         return {
             "game_id": room.id,
@@ -96,6 +104,7 @@ async def room(
             "status": game_room.status,
             "paused": game_room.paused,
             "is_host": game_room.creator_id == identity.user_id,
+            "deck_count": getattr(game_room, "deck_count", 1),
             "player_id": player.id,
             "players": [
                 {

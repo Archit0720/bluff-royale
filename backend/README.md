@@ -23,6 +23,8 @@ Signed-in members can send in-game emote reactions, curated table-talk lines, or
 
 ## Round and timer rules
 
+Room hosts can select one, two, or three standard decks when creating a room; one deck is the default. Multiple decks only increase the number of cards dealt and do not change the game rules.
+
 In a two-active-player round, when the non-contributor skips after a play, the latest contributor keeps the pile and claim and may add cards under the same claim or use **Close Round**. Closing discards the pile and lets that player open the next round. The contributor cannot challenge their own play. A provisional final play remains challengeable and is never returned to a player with no cards. Three-or-more-player skip cycles still discard the pile and start a new round as before.
 
 Turns last 40 seconds. An ordinary active-round timeout skips. If a new-round starter times out before playing, or control returns to a contributor in a two-player round, the game pauses rather than choosing cards for that player.

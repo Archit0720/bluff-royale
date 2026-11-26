@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from ..card import Rank
 class StrictRequest(BaseModel):model_config=ConfigDict(extra='forbid')
 class NameRequest(StrictRequest):player_name:str=Field(min_length=1,max_length=30)
+class CreateRoomRequest(NameRequest):deck_count:int=Field(default=1,ge=1,le=3)
 class ActionRequest(StrictRequest):pass
 class PlayRequest(ActionRequest):card_indices:list[int]=Field(min_length=1);claimed_rank:Rank|None=None
 class EmoteRequest(StrictRequest):
@@ -15,20 +16,20 @@ class EmoteRequest(StrictRequest):
 
 class DialogueRequest(StrictRequest):
     dialogue: Literal[
-        "bold_move",
-        "prove_it",
-        "eyes_on_you",
-        "nice_try",
-        "royal_bluff",
-        "well_played",
-        "calculated",
-        "plot_twist",
-        "no_way",
-        "ice_cold",
-        "crown_jewel",
-        "read_the_table",
-        "almost_had_me",
-        "respect_the_play",
+        "arre_bhai",
+        "kya_scene",
+        "filmi_bluff",
+        "chai_break",
+        "seedha_bol",
+        "wah_ustad",
+        "dimaag_laga",
+        "jugaad_pro",
+        "balle_balle",
+        "shabaash_sher",
+        "rangey_haath",
+        "kya_baat",
+        "boss_move",
+        "scene_set",
     ] | None = None
     custom_text: str | None = Field(default=None, min_length=1, max_length=120)
 

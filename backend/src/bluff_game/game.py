@@ -18,9 +18,10 @@ class SkipResult:player_id:str;round_ended:bool;discarded_count:int;next_player_
 @dataclass(frozen=True,slots=True)
 class CloseRoundResult:player_id:str;discarded_count:int;next_round_starter_id:str|None;newly_finished_ids:tuple[str,...]
 class BluffGame:
- def __init__(self,players):
+ def __init__(self,players,deck_count=1):
   if not 2<=len(players)<=6:raise ValueError('Bluff requires 2 to 6 players.')
-  self.players=players;self.status=GameStatus.WAITING;self.current_player_index=0;self.current_rank=None;self.pile=[];self.discard_pile=[];self.last_play=None;self.skipped_since_last_play=set();self.provisional_finishers=[];self.finishing_order=[];self.event_log=[]
+  if type(deck_count)is not int or not 1<=deck_count<=3:raise ValueError('The number of decks must be between 1 and 3.')
+  self.players=players;self.deck_count=deck_count;self.status=GameStatus.WAITING;self.current_player_index=0;self.current_rank=None;self.pile=[];self.discard_pile=[];self.last_play=None;self.skipped_since_last_play=set();self.provisional_finishers=[];self.finishing_order=[];self.event_log=[]
  @property
  def current_player(self):return self.players[self.current_player_index]
  @property
@@ -28,9 +29,9 @@ class BluffGame:
  @property
  def last_place_id(self):return self.finishing_order[-1] if self.status==GameStatus.FINISHED else None
  def start(self,seed=None):
-  d=Deck();d.shuffle(random.Random(seed));hands=d.deal(len(self.players))
+  rng=random.Random(seed);d=Deck(self.deck_count);d.shuffle(rng);hands=d.deal(len(self.players))
   for p,h in zip(self.players,hands,strict=True):p.hand=h;p.sort_hand()
-  ace=Card(Rank.ACE,Suit.SPADES);self.current_player_index=next(i for i,p in enumerate(self.players)if ace in p.hand);self.status=GameStatus.PLAYING;self._record({'type':'start','player_id':self.current_player.id})
+  ace=Card(Rank.ACE,Suit.SPADES);ace_holders=[p for p in self.players for card in p.hand if card==ace];self.current_player_index=self.players.index(rng.choice(ace_holders));self.status=GameStatus.PLAYING;self._record({'type':'start','player_id':self.current_player.id})
  def play(self,pid,indices,rank=None):
   self._turn(pid)
   if self.current_rank is None:

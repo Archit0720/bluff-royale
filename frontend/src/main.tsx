@@ -15,26 +15,27 @@ type Screen =
   | 'rules'
   | 'options'
   | 'history'
+  | 'guide'
   | 'lobby'
   | 'game';
 type Session = { gameId: string; playerId: string; name: string };
 type Profile = { display_name: string; picture: string | null };
 type EmoteName = 'laugh' | 'wow' | 'clap' | 'heart' | 'bluff' | 'cool' | 'fire' | 'crown' | 'eyes' | 'sweat' | 'shrug';
 type DialogueName =
-  | 'bold_move'
-  | 'prove_it'
-  | 'eyes_on_you'
-  | 'nice_try'
-  | 'royal_bluff'
-  | 'well_played'
-  | 'calculated'
-  | 'plot_twist'
-  | 'no_way'
-  | 'ice_cold'
-  | 'crown_jewel'
-  | 'read_the_table'
-  | 'almost_had_me'
-  | 'respect_the_play';
+  | 'arre_bhai'
+  | 'kya_scene'
+  | 'filmi_bluff'
+  | 'chai_break'
+  | 'seedha_bol'
+  | 'wah_ustad'
+  | 'dimaag_laga'
+  | 'jugaad_pro'
+  | 'balle_balle'
+  | 'shabaash_sher'
+  | 'rangey_haath'
+  | 'kya_baat'
+  | 'boss_move'
+  | 'scene_set';
 type AuthState =
   | { status: 'checking' }
   | { status: 'signed_out' }
@@ -45,20 +46,20 @@ const R = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const sym: Record<string, string> = { H: '♥', D: '♦', C: '♣', S: '♠' };
 const ord = (n: number) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
 const dialogueOptions: { name: DialogueName; label: string }[] = [
-  { name: 'bold_move', label: 'Bold move.' },
-  { name: 'prove_it', label: 'Prove it!' },
-  { name: 'eyes_on_you', label: "I've got my eye on you." },
-  { name: 'nice_try', label: 'Nice try.' },
-  { name: 'royal_bluff', label: 'Royal bluff.' },
-  { name: 'well_played', label: 'Well played.' },
-  { name: 'calculated', label: 'Calculated.' },
-  { name: 'plot_twist', label: 'Plot twist!' },
-  { name: 'no_way', label: 'No way!' },
-  { name: 'ice_cold', label: 'Ice cold.' },
-  { name: 'crown_jewel', label: 'Crown jewel.' },
-  { name: 'read_the_table', label: 'Read the table.' },
-  { name: 'almost_had_me', label: 'Almost had me.' },
-  { name: 'respect_the_play', label: 'Respect the play.' },
+  { name: 'arre_bhai', label: 'Arre bhai, pakde gaye!' },
+  { name: 'kya_scene', label: 'Kya scene hai, boss?' },
+  { name: 'filmi_bluff', label: 'Full filmi bluff!' },
+  { name: 'chai_break', label: 'Chai break ke baad challenge?' },
+  { name: 'seedha_bol', label: 'Seedha bol, yaar!' },
+  { name: 'wah_ustad', label: 'Wah, kya chaal hai!' },
+  { name: 'dimaag_laga', label: 'Dimaag laga, dost!' },
+  { name: 'jugaad_pro', label: 'Jugaad level: pro.' },
+  { name: 'balle_balle', label: 'Balle balle, kya play!' },
+  { name: 'shabaash_sher', label: 'Shabaash, sher!' },
+  { name: 'rangey_haath', label: 'Oho, rangey haath!' },
+  { name: 'kya_baat', label: 'Kya baat, kya baat!' },
+  { name: 'boss_move', label: 'Boss move, ekdum!' },
+  { name: 'scene_set', label: 'Aaj toh scene set hai!' },
 ];
 
 function describeEvent(event: any, players: any[]) {
@@ -99,6 +100,7 @@ function App() {
   const [load, setLoad] = useState(0);
   const [name, setName] = useState(localStorage.getItem('br_name') || '');
   const [code, setCode] = useState('');
+  const [deckCount, setDeckCount] = useState(1);
   const [session, setSession] = useState<Session | null>(null);
   const [room, setRoom] = useState<any>(null);
   const [game, setGame] = useState<any>(null);
@@ -448,6 +450,7 @@ function App() {
         <nav>
           <button onClick={() => requestEntry('play')}>▶ <span>PLAY</span></button>
           <button onClick={() => setScreen('rules')}>▤ <span>HOW TO PLAY</span></button>
+          <button onClick={() => setScreen('guide')}>♛ <span>PLATFORM &amp; CREATOR</span></button>
           <button onClick={() => requestEntry('history')}>◷ <span>PREVIOUS GAMES</span></button>
           <button onClick={() => setScreen('options')}>⚙ <span>OPTIONS</span></button>
         </nav>
@@ -469,6 +472,30 @@ function App() {
             <article><b>04</b><h3>SKIPS</h3><p>A new play resets skips. In a two-player round, the other player's skip returns control to the contributor, who may add cards or close the round. With 3+ active players, when every other active player skips, discard the pile and let the latest contributor open a new round.</p></article>
             <article><b>05</b><h3>FINISH</h3><p>Empty your hand to finish. Your final play remains challengeable. Finished players leave turn rotation and the remaining players continue for positions.</p></article>
             <article><b>40</b><h3>SECONDS</h3><p>Every turn has 40 seconds. Ordinary active-turn timeouts become skips. If a new-round starter times out before playing, or control returns to a contributor in a two-player round, the game pauses instead of choosing cards for them.</p></article>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (screen === 'guide') {
+    return (
+      <main className="page">
+        {back}{accountChip()}
+        <section className="platform-guide">
+          <span className="eyebrow">WELCOME TO THE TABLE</span>
+          <h2>YOUR GUIDE</h2>
+          <div className="guide-steps">
+            <article><b>01 · TAKE A SEAT</b><p>Sign in, choose your table name, and create a private room or join a friend's room code.</p></article>
+            <article><b>02 · PICK YOUR DECKS</b><p>The host can choose one, two, or three standard decks when creating a room. Everyone gets a bigger hand as decks increase.</p></article>
+            <article><b>03 · PLAY THE TABLE</b><p>The A♠ holder opens the first round. Make your claim, read the table, call a bluff, and be the first to empty your hand.</p></article>
+            <article><b>04 · KEEP IT ROYALE</b><p>Use reactions and table talk, watch the turn timer, and check the leaderboard when the match is settled.</p></article>
+          </div>
+          <div className="creator-card">
+            <span className="eyebrow">BUILT BY</span>
+            <h3>Archit Dogra</h3>
+            <a href="mailto:architdogra07@gmail.com">architdogra07@gmail.com</a>
+            <a href="https://github.com/Archit0720" target="_blank" rel="noreferrer">GitHub · @Archit0720</a>
           </div>
         </section>
       </main>
@@ -517,9 +544,17 @@ function App() {
         <section className="join">
           <h2>CREATE OR JOIN TABLE</h2>
           <label>PLAYER NAME<input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Your table name" /></label>
+          <label className="deck-select">NUMBER OF DECKS
+            <select value={deckCount} onChange={(event) => setDeckCount(Number(event.target.value))}>
+              <option value={1}>1 deck · Standard</option>
+              <option value={2}>2 decks · Bigger hands</option>
+              <option value={3}>3 decks · Maximum chaos</option>
+            </select>
+            <small>For rooms you create only. Joining uses the host's deck choice; one deck is the default.</small>
+          </label>
           <button className="gold" disabled={!name.trim() || busy} onClick={() => void run(async () => {
             saveName();
-            const created = await api.create(name);
+            const created = await api.create(name, deckCount);
             setSession({ gameId: created.game_id, playerId: created.player_id, name: created.player_name });
             setScreen('lobby');
           })}>CREATE PRIVATE TABLE</button>
@@ -559,12 +594,12 @@ function App() {
           </div>
           {room?.is_host ? (
             <button className="gold" disabled={(room?.players.length || 0) < 2 || busy} onClick={() => void run(() => api.start(session.gameId))}>
-              {busy ? 'STARTING…' : 'START GAME'}
+              {busy ? 'STARTING…' : `START GAME · ${room?.deck_count || 1} ${(room?.deck_count || 1) === 1 ? 'DECK' : 'DECKS'}`}
             </button>
           ) : (
             <p className="waiting-host" role="status">WAITING FOR THE HOST TO START</p>
           )}
-          <small>A♠ decides who opens the first round</small>
+          <small>{room?.deck_count || 1} {(room?.deck_count || 1) === 1 ? 'deck' : 'decks'} · A♠ decides who opens the first round</small>
           {error && <div className="err" role="alert">{error}</div>}
         </section>
       </main>

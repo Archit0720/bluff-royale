@@ -34,7 +34,8 @@ export const api = {
   login: (credential: string, nonce: string) => post('/auth/google', { credential, nonce }),
   me: () => q('/auth/me'),
   logout: () => post('/auth/logout', {}),
-  create: (player_name: string) => post('/games', { player_name }),
+  create: (player_name: string, deck_count = 1) =>
+    post('/games', { player_name, deck_count }),
   join: (gameId: string, player_name: string) =>
     post(`/games/${gameId}/join`, { player_name }),
   room: (gameId: string) => q(`/games/${gameId}`),
@@ -57,20 +58,20 @@ export const api = {
     message:
       | {
           dialogue:
-            | 'bold_move'
-            | 'prove_it'
-            | 'eyes_on_you'
-            | 'nice_try'
-            | 'royal_bluff'
-            | 'well_played'
-            | 'calculated'
-            | 'plot_twist'
-            | 'no_way'
-            | 'ice_cold'
-            | 'crown_jewel'
-            | 'read_the_table'
-            | 'almost_had_me'
-            | 'respect_the_play';
+            | 'arre_bhai'
+            | 'kya_scene'
+            | 'filmi_bluff'
+            | 'chai_break'
+            | 'seedha_bol'
+            | 'wah_ustad'
+            | 'dimaag_laga'
+            | 'jugaad_pro'
+            | 'balle_balle'
+            | 'shabaash_sher'
+            | 'rangey_haath'
+            | 'kya_baat'
+            | 'boss_move'
+            | 'scene_set';
         }
       | { custom_text: string },
   ) => post(`/games/${gameId}/dialogue`, message),

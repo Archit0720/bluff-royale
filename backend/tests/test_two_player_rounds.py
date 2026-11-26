@@ -189,6 +189,17 @@ def test_last_remaining_player_finishes_without_invalidating_the_game():
     assert game.last_place_id == "second"
 
 
+def test_three_decks_deal_three_aces_and_select_one_holder_to_open():
+    players = [Player(str(index), f"Player {index}") for index in range(6)]
+    game = BluffGame(players, deck_count=3)
+
+    game.start(seed=23)
+
+    ace_of_spades = Card(Rank.ACE, Suit.SPADES)
+    assert sum(player.hand.count(ace_of_spades) for player in players) == 3
+    assert ace_of_spades in game.current_player.hand
+
+
 def test_timeout_pauses_after_control_returns_to_contributor():
     import asyncio
 

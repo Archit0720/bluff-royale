@@ -23,6 +23,7 @@ class Room:
     history_saved: bool = False
     seat_users: dict[str, str] = field(default_factory=dict)
     seat_profiles: dict[str, dict] = field(default_factory=dict)
+    deck_count: int = 1
 
     @property
     def status(self):
@@ -64,16 +65,19 @@ class Manager:
             raise PermissionError("You are not a member of this room.")
         return player
 
-    async def create(self, name, user_id, profile=None):
+    async def create(self, name, user_id, profile=None, deck_count=1):
         name = name.strip()
         if not name:
             raise ValueError("Player name cannot be empty.")
+        if type(deck_count) is not int or not 1 <= deck_count <= 3:
+            raise ValueError("The number of decks must be between 1 and 3.")
         room_id = "".join(secrets.choice(ROOM_ALPHABET) for _ in range(5))
         player = Player(secrets.token_urlsafe(12), name)
         room = Room(
             room_id,
             [player],
             user_id,
+            deck_count=deck_count,
             seat_users={player.id: user_id},
             seat_profiles={player.id: profile or {}},
         )
@@ -130,7 +134,7 @@ class Manager:
                 return room
             if len(room.players) < 2:
                 raise ValueError("At least 2 players are required.")
-            room.game = BluffGame(room.players)
+            room.game = BluffGame(room.players, getattr(room, "deck_count", 1))
             room.game.start()
             room.started_at = time.time()
             self.reset_timer(room)

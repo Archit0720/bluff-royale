@@ -100,6 +100,48 @@ def test_production_google_credential_requires_https(monkeypatch, tmp_path):
     assert "secure" in accepted.headers["set-cookie"].lower()
 
 
+def test_host_can_create_room_with_one_to_three_decks(
+    monkeypatch, tmp_path
+):
+    client, _ = build_client(tmp_path / "decks.sqlite", monkeypatch)
+    guest = TestClient(client.app)
+    sign_in(client, "deck-host", "host@example.test")
+    sign_in(guest, "deck-guest", "guest@example.test")
+
+    for deck_count in (1, 2, 3):
+        body = {"player_name": "Host"}
+        if deck_count != 1:
+            body["deck_count"] = deck_count
+        created = client.post("/games", json=body, headers={"Origin": ORIGIN})
+        assert created.status_code == 200
+        game_id = created.json()["game_id"]
+        room = client.get(f"/games/{game_id}").json()
+        assert room["deck_count"] == deck_count
+
+        joined = guest.post(
+            f"/games/{game_id}/join",
+            json={"player_name": f"Guest {deck_count}"},
+            headers={"Origin": ORIGIN},
+        )
+        assert joined.status_code == 200
+        started = client.post(f"/games/{game_id}/start", headers={"Origin": ORIGIN})
+        assert started.status_code == 200
+        assert len(client.get(f"/games/{game_id}/state").json()["your_hand"]) == (
+            52 * deck_count // 2
+        )
+        assert len(guest.get(f"/games/{game_id}/state").json()["your_hand"]) == (
+            52 * deck_count // 2
+        )
+
+    for deck_count in (0, 4):
+        rejected = client.post(
+            "/games",
+            json={"player_name": "Host", "deck_count": deck_count},
+            headers={"Origin": ORIGIN},
+        )
+        assert rejected.status_code == 422
+
+
 def test_expired_app_session_is_rejected(monkeypatch, tmp_path):
     client, history = build_client(tmp_path / "expired.sqlite", monkeypatch)
     sign_in(client, "subject-expired", "expired@example.test")
@@ -195,13 +237,13 @@ def test_two_accounts_cannot_select_another_seat_or_read_its_hand(
     assert {event["emote"] for event in emotes} == {"clap", "wow"}
     dialogue = owner.post(
         f"/games/{room['game_id']}/dialogue",
-        json={"dialogue": "prove_it"},
+        json={"dialogue": "arre_bhai"},
         headers={"Origin": ORIGIN},
     )
     assert dialogue.status_code == 200
     assert owner.get(f"/games/{room['game_id']}").json()["recent_emotes"][0][
         "dialogue"
-    ] == "prove_it"
+    ] == "arre_bhai"
     custom_text = owner.post(
         f"/games/{room['game_id']}/dialogue",
         json={"custom_text": "The crown is still up for grabs."},
@@ -231,7 +273,7 @@ def test_two_accounts_cannot_select_another_seat_or_read_its_hand(
     assert invalid_dialogue.status_code == 422
     invalid_both = owner.post(
         f"/games/{room['game_id']}/dialogue",
-        json={"dialogue": "prove_it", "custom_text": "also this"},
+        json={"dialogue": "arre_bhai", "custom_text": "also this"},
         headers={"Origin": ORIGIN},
     )
     assert invalid_both.status_code == 422

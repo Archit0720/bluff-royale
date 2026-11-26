@@ -145,6 +145,68 @@ input:focus-visible,
   letter-spacing: .12em;
 }
 
+.platform-guide .eyebrow {
+  display: block;
+  margin-top: 12px;
+}
+
+.guide-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.guide-steps article,
+.creator-card {
+  padding: 18px;
+  border: 1px solid #2d4435;
+  background: linear-gradient(145deg, #0d1d14, #08110c);
+}
+
+.guide-steps article > b {
+  color: var(--gold);
+  font-size: 12px;
+  letter-spacing: .1em;
+}
+
+.guide-steps p {
+  margin-bottom: 0;
+}
+
+.creator-card {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.creator-card h3 {
+  margin: 0;
+  color: #f3ead4;
+  font: 800 28px Georgia, serif;
+}
+
+.creator-card a {
+  color: #e8c66d;
+  overflow-wrap: anywhere;
+}
+
+.deck-select select {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid #3c4d43;
+  border-radius: 2px;
+  background: #08100c;
+  color: #f4ecd7;
+}
+
+.deck-select small {
+  color: #819087;
+  font-size: 11px;
+  letter-spacing: normal;
+}
+
 .emote-bar {
   display: flex;
   justify-content: center;
@@ -443,6 +505,10 @@ input:focus-visible,
 
   .menu nav button {
     padding: 15px;
+  }
+
+  .guide-steps {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .results { padding: 20px 14px; }
