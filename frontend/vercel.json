@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/auth/:path*",
+      "destination": "/api/proxy?__api_path=auth/:path*"
+    },
+    {
+      "source": "/api/games/:path*",
+      "destination": "/api/proxy?__api_path=games/:path*"
+    }
+  ]
+}

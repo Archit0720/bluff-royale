@@ -44,7 +44,11 @@ export default async function handler(
   }
 
   const incoming = new URL(request.url || '/', 'https://vercel.invalid');
-  const apiPath = incoming.pathname.replace(/^\/api(?=\/|$)/, '') || '/';
+  const rewrittenPath = incoming.searchParams.get('__api_path');
+  const apiPath =
+    rewrittenPath === null
+      ? incoming.pathname.replace(/^\/api(?=\/|$)/, '') || '/'
+      : `/${rewrittenPath.replace(/^\/+/, '')}`;
   if (!allowedRoutes.some((route) => route.test(apiPath))) {
     response.statusCode = 404;
     response.end('API route not found.');
@@ -102,14 +106,15 @@ export default async function handler(
       if (typeof value === 'string') headers.set(name, value);
     }
 
-    const upstream = await fetch(
-      new URL(`${apiPath}${incoming.search}`, upstreamOrigin),
-      {
-        method,
-        headers,
-        body: method === 'POST' ? body : undefined,
-      },
-    );
+    const upstreamQuery = new URLSearchParams(incoming.searchParams);
+    upstreamQuery.delete('__api_path');
+    const upstreamUrl = new URL(apiPath, upstreamOrigin);
+    upstreamUrl.search = upstreamQuery.toString();
+    const upstream = await fetch(upstreamUrl, {
+      method,
+      headers,
+      body: method === 'POST' ? body : undefined,
+    });
     response.statusCode = upstream.status;
     upstream.headers.forEach((value, name) => {
       if (name !== 'set-cookie' && name !== 'content-encoding' && name !== 'transfer-encoding') {
