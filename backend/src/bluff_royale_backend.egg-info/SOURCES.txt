@@ -20,3 +20,4 @@ src/bluff_royale_backend.egg-info/dependency_links.txt
 src/bluff_royale_backend.egg-info/requires.txt
 src/bluff_royale_backend.egg-info/top_level.txt
 tests/test_store.py
+tests/test_two_player_rounds.py

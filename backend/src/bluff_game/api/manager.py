@@ -36,7 +36,9 @@ class Manager:
  async def apply_timeout(self,r):
   if not r.game or r.paused or r.game.status!=GameStatus.PLAYING or not r.turn_deadline or time.time()<r.turn_deadline:return
   pid=r.game.current_player.id
-  if r.game.last_play is not None:r.game.skip(pid);r.game.event_log.append({'type':'timeout_skip','player_id':pid});self.reset_timer(r)
+  if 'close_round' in r.game.available_actions(pid):
+   r.paused=True;r.paused_by='system';r.paused_seconds_left=TURN_SECONDS;r.turn_deadline=None;r.game.event_log.append({'type':'timeout_pause','player_id':pid})
+  elif r.game.last_play is not None:r.game.skip(pid);r.game.event_log.append({'type':'timeout_skip','player_id':pid});self.reset_timer(r)
   else:r.paused=True;r.paused_by='system';r.paused_seconds_left=TURN_SECONDS;r.turn_deadline=None;r.game.event_log.append({'type':'timeout_pause','player_id':pid})
   if r.game.status==GameStatus.FINISHED:self.history.save(r)
   await self.save(r)

@@ -45,6 +45,13 @@ async def skip(gid:str,b:ActionRequest,request:Request):
   if r.paused:raise RuntimeError('Game is paused.')
   x=r.game.skip(b.player_id);await m.action_done(r);return asdict(x)
  except Exception as e:raise fail(e)
+@router.post('/{gid}/close-round')
+async def close_round(gid:str,b:ActionRequest,request:Request):
+ try:
+  m=manager(request);r=await m.get(gid)
+  if r.paused:raise RuntimeError('Game is paused.')
+  x=r.game.close_round(b.player_id);await m.action_done(r);return asdict(x)
+ except Exception as e:raise fail(e)
 @router.post('/{gid}/challenge')
 async def challenge(gid:str,b:ActionRequest,request:Request):
  try:
