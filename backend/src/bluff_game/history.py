@@ -1,7 +1,16 @@
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, create_engine, select
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    String,
+    Text,
+    create_engine,
+    inspect,
+    select,
+    text,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 
@@ -34,6 +43,36 @@ class History:
         args = {"check_same_thread": False} if url.startswith("sqlite") else {}
         self.engine = create_engine(url, connect_args=args)
         auth.Base.metadata.create_all(self.engine)
+        with self.engine.begin() as connection:
+            if connection.dialect.name == "postgresql":
+                connection.execute(
+                    text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name "
+                        "VARCHAR(120) NOT NULL DEFAULT 'Player'"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+                        "picture VARCHAR(2048)"
+                    )
+                )
+            else:
+                columns = {
+                    column["name"]
+                    for column in inspect(connection).get_columns("users")
+                }
+                if "display_name" not in columns:
+                    connection.execute(
+                        text(
+                            "ALTER TABLE users ADD COLUMN display_name "
+                            "VARCHAR(120) NOT NULL DEFAULT 'Player'"
+                        )
+                    )
+                if "picture" not in columns:
+                    connection.execute(
+                        text("ALTER TABLE users ADD COLUMN picture VARCHAR(2048)")
+                    )
         self.Session = sessionmaker(self.engine)
 
     def save(self, room):

@@ -78,41 +78,43 @@ class Manager:
         return room, player
 
     async def join(self, gid, name, user_id):
-        room = await self.get(gid)
-        name = name.strip()
-        if not name:
-            raise ValueError("Player name cannot be empty.")
-        if not hasattr(room, "seat_users"):
-            raise RuntimeError("This legacy room cannot be joined after sign-in was added.")
-        if room.game:
-            raise RuntimeError("Game already started.")
-        if len(room.players) >= 6:
-            raise ValueError("Room is full.")
-        if user_id in room.seat_users.values():
-            raise ValueError("You already have a seat in this room.")
-        if any(player.name.casefold() == name.casefold() for player in room.players):
-            raise ValueError("Name already used.")
-        player = Player(secrets.token_urlsafe(12), name)
-        room.players.append(player)
-        room.seat_users[player.id] = user_id
-        await self.save(room)
-        return player
+        async with self.store.room_lock(gid.upper()):
+            room = await self.get(gid)
+            name = name.strip()
+            if not name:
+                raise ValueError("Player name cannot be empty.")
+            if not hasattr(room, "seat_users"):
+                raise RuntimeError("This legacy room cannot be joined after sign-in was added.")
+            if room.game:
+                raise RuntimeError("Game already started.")
+            if len(room.players) >= 6:
+                raise ValueError("Room is full.")
+            if user_id in room.seat_users.values():
+                raise ValueError("You already have a seat in this room.")
+            if any(player.name.casefold() == name.casefold() for player in room.players):
+                raise ValueError("Name already used.")
+            player = Player(secrets.token_urlsafe(12), name)
+            room.players.append(player)
+            room.seat_users[player.id] = user_id
+            await self.save(room)
+            return player
 
     async def start(self, gid, user_id):
-        room = await self.get(gid)
-        self.player_for_user(room, user_id)
-        if room.creator_id != user_id:
-            raise PermissionError("Only the room creator can start the game.")
-        if room.game:
-            raise RuntimeError("Game already started.")
-        if len(room.players) < 2:
-            raise ValueError("At least 2 players are required.")
-        room.game = BluffGame(room.players)
-        room.game.start()
-        room.started_at = time.time()
-        self.reset_timer(room)
-        await self.save(room)
-        return room
+        async with self.store.room_lock(gid.upper()):
+            room = await self.get(gid)
+            self.player_for_user(room, user_id)
+            if room.creator_id != user_id:
+                raise PermissionError("Only the room creator can start the game.")
+            if room.game:
+                return room
+            if len(room.players) < 2:
+                raise ValueError("At least 2 players are required.")
+            room.game = BluffGame(room.players)
+            room.game.start()
+            room.started_at = time.time()
+            self.reset_timer(room)
+            await self.save(room)
+            return room
 
     def reset_timer(self, room):
         room.turn_deadline = time.time() + TURN_SECONDS

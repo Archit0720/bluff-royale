@@ -1,3 +1,4 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -68,6 +69,11 @@ def test_google_nonce_is_single_use(monkeypatch, tmp_path):
 
     assert replay.status_code == 401
     assert "already been used" in replay.json()["detail"]
+    profile = client.get("/auth/me")
+    assert profile.status_code == 200
+    assert profile.json()["display_name"] == "Player"
+    assert "email" not in profile.json()
+    assert "google_sub" not in profile.json()
 
 
 def test_production_google_credential_requires_https(monkeypatch, tmp_path):
@@ -129,7 +135,10 @@ def test_two_accounts_cannot_select_another_seat_or_read_its_hand(
         headers={"Origin": ORIGIN},
     ).json()
 
-    assert owner.get(f"/games/{room['game_id']}").status_code == 200
+    owner_room = owner.get(f"/games/{room['game_id']}")
+    assert owner_room.status_code == 200
+    assert owner_room.json()["is_host"] is True
+    assert guest.get(f"/games/{room['game_id']}").json()["is_host"] is False
     stored_room = owner.app.state.manager.store.data[room["game_id"]]
     stored_room.turn_deadline = time.time() - 1
     assert stranger.get(f"/games/{room['game_id']}").status_code == 403
@@ -145,6 +154,33 @@ def test_two_accounts_cannot_select_another_seat_or_read_its_hand(
     )
     assert started.status_code == 200
     assert "your_hand" not in started.json()
+    original_deadline = stored_room.turn_deadline
+    original_hand = owner.get(f"/games/{room['game_id']}/state").json()["your_hand"]
+    repeated = owner.post(
+        f"/games/{room['game_id']}/start",
+        headers={"Origin": ORIGIN},
+    )
+    assert repeated.status_code == 200
+    assert stored_room.turn_deadline == original_deadline
+    assert owner.get(f"/games/{room['game_id']}/state").json()["your_hand"] == original_hand
+    assert owner.post(
+        f"/games/{room['game_id']}/emote",
+        json={"emote": "clap"},
+        headers={"Origin": ORIGIN},
+    ).status_code == 200
+    assert guest.post(
+        f"/games/{room['game_id']}/emote",
+        json={"emote": "wow"},
+        headers={"Origin": ORIGIN},
+    ).status_code == 200
+    outsider_emote = stranger.post(
+        f"/games/{room['game_id']}/emote",
+        json={"emote": "heart"},
+        headers={"Origin": ORIGIN},
+    )
+    assert outsider_emote.status_code == 403
+    emotes = owner.get(f"/games/{room['game_id']}").json()["recent_emotes"]
+    assert {event["emote"] for event in emotes} == {"clap", "wow"}
 
     owner_state = owner.get(f"/games/{room['game_id']}/state").json()
     guest_state = guest.get(f"/games/{room['game_id']}/state").json()
@@ -231,3 +267,36 @@ def test_two_accounts_cannot_select_another_seat_or_read_its_hand(
 
     assert owner.post("/auth/logout", headers={"Origin": ORIGIN}).status_code == 200
     assert owner.get("/auth/me").status_code == 401
+
+
+def test_concurrent_host_start_deals_once(monkeypatch, tmp_path):
+    owner, _ = build_client(tmp_path / "concurrent-start.sqlite", monkeypatch)
+    guest = TestClient(owner.app)
+    sign_in(owner, "subject-host", "host@example.test")
+    sign_in(guest, "subject-guest-start", "guest-start@example.test")
+    created = owner.post(
+        "/games",
+        json={"player_name": "Host"},
+        headers={"Origin": ORIGIN},
+    ).json()
+    guest.post(
+        f"/games/{created['game_id']}/join",
+        json={"player_name": "Guest"},
+        headers={"Origin": ORIGIN},
+    )
+
+    with owner.app.state.history.Session() as db:
+        host_user = db.scalar(select(User).where(User.google_sub == "subject-host"))
+        host_user_id = host_user.id
+
+    async def concurrent_start():
+        manager = owner.app.state.manager
+        return await asyncio.gather(
+            manager.start(created["game_id"], host_user_id),
+            manager.start(created["game_id"], host_user_id),
+        )
+
+    first, second = asyncio.run(concurrent_start())
+    assert first.game is second.game
+    assert first.turn_deadline == second.turn_deadline
+    assert first.game.status.value == "playing"

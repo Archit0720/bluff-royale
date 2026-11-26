@@ -23,6 +23,8 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     google_sub: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     email: Mapped[str] = mapped_column(String(320))
+    display_name: Mapped[str] = mapped_column(String(120), default="Player")
+    picture: Mapped[str | None] = mapped_column(String(2048), nullable=True)
 
 
 class LoginNonce(Base):
@@ -97,12 +99,15 @@ class AuthService:
 
         subject = claims.get("sub")
         email = claims.get("email")
+        display_name = claims.get("name")
+        picture = claims.get("picture")
         if (
             not isinstance(subject, str)
             or not subject
             or not isinstance(email, str)
             or claims.get("email_verified") is not True
             or claims.get("nonce") != nonce
+            or (picture is not None and not isinstance(picture, str))
         ):
             raise AuthenticationError("Google credential claims are incomplete or invalid.")
 
@@ -122,7 +127,17 @@ class AuthService:
             if user is None:
                 try:
                     with session.begin_nested():
-                        user = User(id=str(uuid4()), google_sub=subject, email=email)
+                        user = User(
+                            id=str(uuid4()),
+                            google_sub=subject,
+                            email=email,
+                            display_name=(
+                                display_name.strip()[:120]
+                                if isinstance(display_name, str) and display_name.strip()
+                                else "Player"
+                            ),
+                            picture=picture,
+                        )
                         session.add(user)
                         session.flush()
                 except IntegrityError:
@@ -131,6 +146,13 @@ class AuthService:
                     )
                     if user is None:
                         raise
+            else:
+                user.display_name = (
+                    display_name.strip()[:120]
+                    if isinstance(display_name, str) and display_name.strip()
+                    else user.display_name
+                )
+                user.picture = picture
 
             session.add(
                 AppSession(
@@ -142,6 +164,16 @@ class AuthService:
             user_id = user.id
 
         return token, user_id
+
+    def profile(self, user_id: str):
+        with self.sessions() as session:
+            user = session.get(User, user_id)
+            if user is None:
+                return None
+            return {
+                "display_name": user.display_name,
+                "picture": user.picture,
+            }
 
     def identity_for_token(self, token: str | None):
         if not token:

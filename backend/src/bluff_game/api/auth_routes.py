@@ -72,8 +72,11 @@ def google_login(
 
 
 @router.get("/me")
-def me(identity=Depends(current_identity)):
-    return {"authenticated": True}
+def me(request: Request, identity=Depends(current_identity)):
+    profile = request.app.state.auth.profile(identity.user_id)
+    if profile is None:
+        raise HTTPException(status_code=401, detail="App session is no longer valid.")
+    return {"authenticated": True, **profile}
 
 
 @router.get("/me/matches")

@@ -4,7 +4,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .auth_routes import current_identity
-from .schemas import ActionRequest, NameRequest, PlayRequest
+from .schemas import ActionRequest, EmoteRequest, NameRequest, PlayRequest
 
 router = APIRouter(prefix="/games", tags=["games"])
 
@@ -83,6 +83,7 @@ async def room(
             "game_id": game_room.id,
             "status": game_room.status,
             "paused": game_room.paused,
+            "is_host": game_room.creator_id == identity.user_id,
             "player_id": player.id,
             "players": [
                 {
@@ -92,7 +93,34 @@ async def room(
                 }
                 for item in game_room.players
             ],
+            "recent_emotes": await service.store.recent_emotes(game_room.id),
         }
+    except (KeyError, PermissionError, ValueError, RuntimeError) as error:
+        raise fail(error) from error
+
+
+@router.post("/{gid}/emote")
+async def emote(
+    gid: str,
+    body: EmoteRequest,
+    request: Request,
+    identity=Depends(current_identity),
+):
+    try:
+        service = manager(request)
+        game_room = await service.get_for_user(gid, identity.user_id)
+        player = service.player_for_user(game_room, identity.user_id)
+        if game_room.game is None:
+            raise RuntimeError("The game has not started.")
+        if game_room.game.status.value != "playing":
+            raise RuntimeError("Emotes are only available during a game.")
+        event = {
+            "player_id": player.id,
+            "emote": body.emote,
+            "created_at": time.time(),
+        }
+        await service.store.publish_emote(game_room.id, event)
+        return {"sent": True}
     except (KeyError, PermissionError, ValueError, RuntimeError) as error:
         raise fail(error) from error
 

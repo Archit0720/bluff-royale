@@ -1,4 +1,11 @@
-const API = import.meta.env.VITE_API_URL || window.location.origin;
+const API = '/api';
+
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 async function q(path: string, options: RequestInit = {}) {
   const response = await fetch(API + path, {
@@ -10,7 +17,9 @@ async function q(path: string, options: RequestInit = {}) {
     },
   });
   const data = await response.json().catch(() => ({ detail: 'Invalid server response' }));
-  if (!response.ok) throw Error(data.detail || `Request failed (${response.status})`);
+  if (!response.ok) {
+    throw new ApiError(data.detail || `Request failed (${response.status})`, response.status);
+  }
   return data;
 }
 
@@ -22,12 +31,7 @@ const post = (path: string, body?: unknown) =>
 
 export const api = {
   nonce: () => q('/auth/nonce'),
-  login: (credential: string, nonce: string) => {
-    if (import.meta.env.PROD && new URL(API, window.location.href).protocol !== 'https:') {
-      throw Error('Google sign-in requires an HTTPS API endpoint in production.');
-    }
-    return post('/auth/google', { credential, nonce });
-  },
+  login: (credential: string, nonce: string) => post('/auth/google', { credential, nonce }),
   me: () => q('/auth/me'),
   logout: () => post('/auth/logout', {}),
   create: (player_name: string) => post('/games', { player_name }),
@@ -43,5 +47,7 @@ export const api = {
   challenge: (gameId: string, _playerId?: string) => post(`/games/${gameId}/challenge`, {}),
   pause: (gameId: string, _playerId?: string) => post(`/games/${gameId}/pause`, {}),
   resume: (gameId: string, _playerId?: string) => post(`/games/${gameId}/resume`, {}),
+  emote: (gameId: string, emote: 'laugh' | 'wow' | 'clap' | 'heart' | 'bluff') =>
+    post(`/games/${gameId}/emote`, { emote }),
   history: (_playerName?: string) => q('/auth/me/matches'),
 };
