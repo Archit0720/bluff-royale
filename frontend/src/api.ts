@@ -16,7 +16,15 @@ async function q(path: string, options: RequestInit = {}) {
       ...(options.headers || {}),
     },
   });
-  const data = await response.json().catch(() => ({ detail: 'Invalid server response' }));
+  let data: any;
+  try {
+    data = await response.json();
+  } catch {
+    const message = response.ok
+      ? 'The server returned an unexpected response. Try again shortly.'
+      : `The game server is temporarily unavailable (HTTP ${response.status}).`;
+    throw new ApiError(message, response.status);
+  }
   if (!response.ok) {
     throw new ApiError(data.detail || `Request failed (${response.status})`, response.status);
   }

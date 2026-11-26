@@ -61,6 +61,37 @@ const dialogueOptions: { name: DialogueName; label: string }[] = [
   { name: 'boss_move', label: 'Boss move, ekdum!' },
   { name: 'scene_set', label: 'Aaj toh scene set hai!' },
 ];
+const SESSION_RETRY_DELAYS = [0, 1500, 3000, 6000, 10000, 15000, 15000, 15000];
+
+function isTransientSessionFailure(cause: unknown) {
+  return cause instanceof TypeError
+    || (cause instanceof ApiError && (
+      cause.status === 408 || cause.status === 429 || cause.status >= 500
+    ));
+}
+
+async function checkSessionWithRetry(
+  onRetry: (attempt: number) => void,
+  shouldContinue: () => boolean = () => true,
+) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < SESSION_RETRY_DELAYS.length; attempt += 1) {
+    const delay = SESSION_RETRY_DELAYS[attempt];
+    if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
+    if (!shouldContinue()) return null;
+    try {
+      return await api.me();
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 401) throw cause;
+      if (!isTransientSessionFailure(cause) || attempt === SESSION_RETRY_DELAYS.length - 1) {
+        throw cause;
+      }
+      lastError = cause;
+      onRetry(attempt + 1);
+    }
+  }
+  throw lastError;
+}
 
 function describeEvent(event: any, players: any[]) {
   const nameOf = (id: string) => players.find((player) => player.id === id)?.name || 'A player';
@@ -135,9 +166,19 @@ function App() {
 
   useEffect(() => {
     let active = true;
-    api.me().then(
+    checkSessionWithRetry(
+      (attempt) => {
+        if (active) {
+          setAuthError(`The game server is waking up. Retrying session check (${attempt}/${SESSION_RETRY_DELAYS.length - 1})…`);
+        }
+      },
+      () => active,
+    ).then(
       (profile: Profile) => {
-        if (active) setAuth({ status: 'signed_in', profile });
+        if (active) {
+          setAuth({ status: 'signed_in', profile });
+          setAuthError('');
+        }
       },
       (cause: unknown) => {
         if (!active) return;
@@ -145,9 +186,11 @@ function App() {
           setAuth({ status: 'signed_out' });
         } else {
           setAuthError(
-            cause instanceof Error
-              ? `Unable to check your session: ${cause.message}`
-              : 'Unable to check your session. Check your connection and retry.',
+            isTransientSessionFailure(cause)
+              ? 'The game server is still unavailable. Your sign-in has not been cleared; retry the session check in a moment.'
+              : cause instanceof Error
+                ? `Unable to check your session: ${cause.message}`
+                : 'Unable to check your session. Check your connection and retry.',
           );
         }
       },
@@ -282,16 +325,26 @@ function App() {
   }
 
   async function retrySessionCheck() {
-    setAuthError('');
+    setAuthError('Checking your session…');
     setAuth({ status: 'checking' });
     try {
-      const profile = await api.me();
+      const profile = await checkSessionWithRetry((attempt) => {
+        setAuthError(`The game server is waking up. Retrying session check (${attempt}/${SESSION_RETRY_DELAYS.length - 1})…`);
+      });
+      if (!profile) return;
       setAuth({ status: 'signed_in', profile });
+      setAuthError('');
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) {
         setAuth({ status: 'signed_out' });
       } else {
-        setAuthError(cause instanceof Error ? cause.message : 'Unable to check your session.');
+        setAuthError(
+          isTransientSessionFailure(cause)
+            ? 'The game server is still unavailable. Your sign-in has not been cleared; retry the session check in a moment.'
+            : cause instanceof Error
+              ? cause.message
+              : 'Unable to check your session.',
+        );
       }
     }
   }
