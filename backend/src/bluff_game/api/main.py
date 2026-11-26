@@ -4,15 +4,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from ..config import (
+    ALLOWED_ORIGINS,
     DATABASE_URL,
+    GOOGLE_CLIENT_ID,
     REDIS_URL,
     USE_MEMORY_STORE,
-    FRONTEND_URL,
 )
+from ..auth import AuthService
 from ..history import History
 from ..storage.room_store import MemoryRoomStore, RedisRoomStore
 from .manager import Manager
 from .routes import router
+from .auth_routes import router as auth_router
 
 
 @asynccontextmanager
@@ -26,10 +29,10 @@ async def lifespan(app):
     if hasattr(store, "ping"):
         await store.ping()
 
-    app.state.manager = Manager(
-        store,
-        History(DATABASE_URL),
-    )
+    history = History(DATABASE_URL)
+    app.state.history = history
+    app.state.auth = AuthService(history.Session, GOOGLE_CLIENT_ID)
+    app.state.manager = Manager(store, history)
 
     yield
 
@@ -44,16 +47,9 @@ app = FastAPI(
 )
 
 
-allowed_origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    FRONTEND_URL,
-]
-
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,6 +57,7 @@ app.add_middleware(
 
 
 app.include_router(router)
+app.include_router(auth_router)
 
 
 @app.get("/health")

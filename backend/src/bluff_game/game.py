@@ -14,6 +14,8 @@ class Play:
 class ChallengeResult:challenger_id:str;challenged_player_id:str;was_bluff:bool;loser_id:str;picked_up_count:int;revealed_cards:tuple[Card,...];next_round_starter_id:str|None;newly_finished_ids:tuple[str,...]
 @dataclass(frozen=True,slots=True)
 class SkipResult:player_id:str;round_ended:bool;discarded_count:int;next_player_id:str|None;newly_finished_ids:tuple[str,...]
+@dataclass(frozen=True,slots=True)
+class CloseRoundResult:player_id:str;discarded_count:int;next_round_starter_id:str|None;newly_finished_ids:tuple[str,...]
 class BluffGame:
  def __init__(self,players):
   if not 2<=len(players)<=6:raise ValueError('Bluff requires 2 to 6 players.')
@@ -40,23 +42,38 @@ class BluffGame:
  def skip(self,pid):
   self._turn(pid)
   if self.last_play is None:raise RuntimeError('The round starter cannot skip before any cards are played.')
-  newly=self._confirm_except(self.last_play.player_id);self.skipped_since_last_play.add(pid);self.event_log.append({'type':'skip','player_id':pid});last=self.last_play.player_id;required={p.id for p in self.active_players if p.id!=last}
+  last=self.last_play.player_id;newly=self._confirm_except(last);self.skipped_since_last_play.add(pid);self.event_log.append({'type':'skip','player_id':pid})
+  if self.status==GameStatus.FINISHED:
+   n=len(self.pile);self.discard_pile.extend(self.pile);self.pile.clear();return SkipResult(pid,True,n,None,tuple(newly))
+  required={p.id for p in self.active_players if p.id!=last}
   if required.issubset(self.skipped_since_last_play):
+   if len(self.active_players)==2 and self._eligible(last):
+    self._set(last);self.event_log.append({'type':'return_to_contributor','player_id':last});return SkipResult(pid,False,0,last,tuple(newly))
    n=len(self.pile);self.discard_pile.extend(self.pile);self.pile.clear();newly+=self._confirm_all()
    if self._complete():return SkipResult(pid,True,n,None,tuple(newly))
    starter=last if self._eligible(last) else self._next(last).id;self._new_round(starter);return SkipResult(pid,True,n,starter,tuple(newly))
   self._advance();return SkipResult(pid,False,0,self.current_player.id,tuple(newly))
+ def close_round(self,pid):
+  self._turn(pid)
+  if 'close_round' not in self.available_actions(pid):raise RuntimeError('The round cannot be closed right now.')
+  n=len(self.pile);self.discard_pile.extend(self.pile);self.pile.clear();newly=self._confirm_all()
+  if self._complete():return CloseRoundResult(pid,n,None,tuple(newly))
+  self._new_round(pid);return CloseRoundResult(pid,n,pid,tuple(newly))
  def challenge(self,pid):
   self._turn(pid)
   if self.last_play is None:raise RuntimeError('There is no play to challenge.')
-  challenged=self.last_play;bluff=challenged.was_bluff;loser=challenged.player_id if bluff else pid;starter=pid if bluff else challenged.player_id;n=len(self.pile);self.get_player(loser).receive_cards(self.pile);self.pile.clear()
+  challenged=self.last_play
+  if challenged.player_id==pid:raise ValueError('A player cannot challenge their own contribution.')
+  bluff=challenged.was_bluff;loser=challenged.player_id if bluff else pid;starter=pid if bluff else challenged.player_id;n=len(self.pile);self.get_player(loser).receive_cards(self.pile);self.pile.clear()
   if loser in self.provisional_finishers:self.provisional_finishers.remove(loser)
   newly=self._confirm_all();self.event_log.append({'type':'challenge','challenger_id':pid,'challenged_id':challenged.player_id,'was_bluff':bluff,'loser_id':loser,'pile':n});next_starter=None
   if not self._complete():next_starter=starter if self._eligible(starter)else self._next(starter).id;self._new_round(next_starter)
   return ChallengeResult(pid,challenged.player_id,bluff,loser,n,challenged.cards,next_starter,tuple(newly))
  def available_actions(self,pid):
   if self.status!=GameStatus.PLAYING or self.current_player.id!=pid:return[]
-  return['play']if self.last_play is None else['play','challenge','skip']
+  if self.last_play is None:return['play']
+  if self.last_play.player_id==pid and len(self.active_players)==2 and self._eligible(pid) and all(p.id==pid or p.id in self.skipped_since_last_play for p in self.active_players):return['play','close_round']
+  return['play','challenge','skip']
  def visible_state(self,pid):
   v=self.get_player(pid);return{'status':self.status.value,'current_rank':self.current_rank.value if self.current_rank else None,'current_player_id':self.current_player.id if self.status==GameStatus.PLAYING else None,'pile_size':len(self.pile),'discarded_count':len(self.discard_pile),'last_play':None if not self.last_play else{'player_id':self.last_play.player_id,'card_count':len(self.last_play.cards),'claimed_rank':self.last_play.claimed_rank.value},'skipped_player_ids':sorted(self.skipped_since_last_play),'provisional_finishers':list(self.provisional_finishers),'finishing_order':list(self.finishing_order),'last_place_id':self.last_place_id,'available_actions':self.available_actions(pid),'players':[{'id':p.id,'name':p.name,'card_count':p.card_count,'position':self.finishing_order.index(p.id)+1 if p.id in self.finishing_order else None,'provisional':p.id in self.provisional_finishers}for p in self.players],'your_hand':[str(c)for c in v.hand],'recent_events':self.event_log[-8:]}
  def get_player(self,pid):
