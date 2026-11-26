@@ -1,5 +1,6 @@
-from pydantic import BaseModel,Field
+from pydantic import BaseModel,ConfigDict,Field
 from ..card import Rank
-class NameRequest(BaseModel):player_name:str=Field(min_length=1,max_length=30)
-class ActionRequest(BaseModel):player_id:str
+class StrictRequest(BaseModel):model_config=ConfigDict(extra='forbid')
+class NameRequest(StrictRequest):player_name:str=Field(min_length=1,max_length=30)
+class ActionRequest(StrictRequest):pass
 class PlayRequest(ActionRequest):card_indices:list[int]=Field(min_length=1);claimed_rank:Rank|None=None

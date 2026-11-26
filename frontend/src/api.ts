@@ -1,1 +1,47 @@
-const API=import.meta.env.VITE_API_URL||'http://127.0.0.1:8000';async function q(path:string,o?:RequestInit){const r=await fetch(API+path,{...o,headers:{'Content-Type':'application/json',...(o?.headers||{})}});const d=await r.json().catch(()=>({detail:'Invalid server response'}));if(!r.ok)throw Error(d.detail||`Request failed (${r.status})`);return d}const post=(p:string,b?:any)=>q(p,{method:'POST',body:b?JSON.stringify(b):undefined});export const api={create:(player_name:string)=>post('/games',{player_name}),join:(g:string,player_name:string)=>post(`/games/${g}/join`,{player_name}),room:(g:string)=>q(`/games/${g}`),start:(g:string)=>post(`/games/${g}/start`),state:(g:string,p:string)=>q(`/games/${g}/players/${p}`),play:(g:string,p:string,card_indices:number[],claimed_rank?:string)=>post(`/games/${g}/play`,{player_id:p,card_indices,claimed_rank}),skip:(g:string,p:string)=>post(`/games/${g}/skip`,{player_id:p}),closeRound:(g:string,p:string)=>post(`/games/${g}/close-round`,{player_id:p}),challenge:(g:string,p:string)=>post(`/games/${g}/challenge`,{player_id:p}),pause:(g:string,p:string)=>post(`/games/${g}/pause`,{player_id:p}),resume:(g:string,p:string)=>post(`/games/${g}/resume`,{player_id:p}),history:(name:string)=>q(`/games/history/${encodeURIComponent(name)}`)};
+const API = import.meta.env.VITE_API_URL || window.location.origin;
+
+async function q(path: string, options: RequestInit = {}) {
+  const response = await fetch(API + path, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options.headers || {}),
+    },
+  });
+  const data = await response.json().catch(() => ({ detail: 'Invalid server response' }));
+  if (!response.ok) throw Error(data.detail || `Request failed (${response.status})`);
+  return data;
+}
+
+const post = (path: string, body?: unknown) =>
+  q(path, {
+    method: 'POST',
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+export const api = {
+  nonce: () => q('/auth/nonce'),
+  login: (credential: string, nonce: string) => {
+    if (import.meta.env.PROD && new URL(API, window.location.href).protocol !== 'https:') {
+      throw Error('Google sign-in requires an HTTPS API endpoint in production.');
+    }
+    return post('/auth/google', { credential, nonce });
+  },
+  me: () => q('/auth/me'),
+  logout: () => post('/auth/logout', {}),
+  create: (player_name: string) => post('/games', { player_name }),
+  join: (gameId: string, player_name: string) =>
+    post(`/games/${gameId}/join`, { player_name }),
+  room: (gameId: string) => q(`/games/${gameId}`),
+  start: (gameId: string) => post(`/games/${gameId}/start`),
+  state: (gameId: string, _playerId?: string) => q(`/games/${gameId}/state`),
+  play: (gameId: string, _playerId: string, card_indices: number[], claimed_rank?: string) =>
+    post(`/games/${gameId}/play`, { card_indices, claimed_rank }),
+  skip: (gameId: string, _playerId?: string) => post(`/games/${gameId}/skip`, {}),
+  closeRound: (gameId: string, _playerId?: string) => post(`/games/${gameId}/close-round`, {}),
+  challenge: (gameId: string, _playerId?: string) => post(`/games/${gameId}/challenge`, {}),
+  pause: (gameId: string, _playerId?: string) => post(`/games/${gameId}/pause`, {}),
+  resume: (gameId: string, _playerId?: string) => post(`/games/${gameId}/resume`, {}),
+  history: (_playerName?: string) => q('/auth/me/matches'),
+};

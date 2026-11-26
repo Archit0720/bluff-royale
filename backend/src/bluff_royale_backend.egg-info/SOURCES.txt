@@ -1,6 +1,7 @@
 README.md
 pyproject.toml
 src/bluff_game/__init__.py
+src/bluff_game/auth.py
 src/bluff_game/card.py
 src/bluff_game/config.py
 src/bluff_game/deck.py
@@ -8,6 +9,7 @@ src/bluff_game/game.py
 src/bluff_game/history.py
 src/bluff_game/player.py
 src/bluff_game/api/__init__.py
+src/bluff_game/api/auth_routes.py
 src/bluff_game/api/main.py
 src/bluff_game/api/manager.py
 src/bluff_game/api/routes.py
@@ -19,5 +21,6 @@ src/bluff_royale_backend.egg-info/SOURCES.txt
 src/bluff_royale_backend.egg-info/dependency_links.txt
 src/bluff_royale_backend.egg-info/requires.txt
 src/bluff_royale_backend.egg-info/top_level.txt
+tests/test_authenticated_api.py
 tests/test_store.py
 tests/test_two_player_rounds.py

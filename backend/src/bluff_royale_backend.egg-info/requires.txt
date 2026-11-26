@@ -3,6 +3,7 @@ uvicorn[standard]<1,>=0.32
 redis<9,>=5
 sqlalchemy<3,>=2
 psycopg[binary]<4,>=3
+google-auth[requests]<3,>=2.30
 
 [dev]
 pytest>=8

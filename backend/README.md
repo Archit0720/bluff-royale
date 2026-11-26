@@ -1,17 +1,26 @@
-# Bluff Royale backend v0.6
+# Bluff Royale backend
 
-Adds Redis room persistence, SQL match history, 40-second server-authoritative turns, pause/resume, timeout auto-skip, and existing finishing-position rules.
+FastAPI game API with Redis room persistence, SQL match history, Google Identity Services sign-in, and server-authorized player actions.
 
-## Windows setup
-1. `docker compose up -d`
-2. `python -m venv .venv`
-3. `.\.venv\Scripts\Activate.ps1`
-4. `python -m pip install -e ".[dev]"`
-5. Copy `.env.example` to `.env` and load variables, or use defaults.
-6. `uvicorn bluff_game.api.main:app --reload`
+## Local setup
 
-Timer rule: timeout auto-skips during an active round. If a new-round starter times out before playing, or control returns to a latest contributor after the other player skips in a two-player round, the game pauses because the server must never select cards for a player.
+1. Start Redis with `docker compose up -d`.
+2. Create and activate a virtual environment:
+   `python -m venv .venv` and `.\.venv\Scripts\Activate.ps1`.
+3. Install dependencies: `python -m pip install -e ".[dev]"`.
+4. Copy `.env.example` to `.env`. Set `GOOGLE_CLIENT_ID` to the OAuth web client ID used by the frontend.
+5. Run `uvicorn bluff_game.api.main:app --reload`.
+
+For local cookie authentication, open the frontend and API using the same hostname (`localhost` or `127.0.0.1`). In production, set `APP_ENV=production`, `GOOGLE_CLIENT_ID`, `FRONTEND_URL`, and `DATABASE_URL`; serve the API over HTTPS behind a proxy configured to pass the HTTPS scheme. Production auth cookies are Secure, HttpOnly, SameSite=None. `DATABASE_URL` can point to Neon/PostgreSQL and `REDIS_URL` to a hosted Redis service.
+
+## Authentication and private data
+
+The browser obtains a short-lived sign-in nonce, initializes the Google Identity Services button with it, and posts the returned credential to FastAPI. The API verifies the Google ID token audience/signature and nonce with `google-auth`, then consumes the nonce once and issues a 30-day revocable HttpOnly session cookie. Google email and subject remain server-side.
+
+Rooms bind each seat to an internal user ID. All room reads and game actions require a valid session and room membership; the server derives the acting seat from that session. Rooms created before authenticated seats were introduced cannot be claimed and expire under the existing Redis TTL. Match history is available only through `GET /auth/me/matches`, using recorded participation by internal user ID. Existing legacy matches are not attributed by display name.
+
+## Round and timer rules
 
 In a two-active-player round, when the non-contributor skips after a play, the latest contributor keeps the pile and claim and may add cards under the same claim or use **Close Round**. Closing discards the pile and lets that player open the next round. The contributor cannot challenge their own play. A provisional final play remains challengeable and is never returned to a player with no cards. Three-or-more-player skip cycles still discard the pile and start a new round as before.
 
-History is SQLite locally. For free hosting later, set DATABASE_URL to a hosted PostgreSQL URL without changing code.
+Turns last 40 seconds. An ordinary active-round timeout skips. If a new-round starter times out before playing, or control returns to a contributor in a two-player round, the game pauses rather than choosing cards for that player.

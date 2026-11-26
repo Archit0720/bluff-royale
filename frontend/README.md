@@ -1,9 +1,13 @@
-# Bluff Royale frontend v0.6
+# Bluff Royale frontend
 
-Designed for Bluff Royale backend v0.6.
+Designed for the authenticated Bluff Royale API.
 
 ## Run
-npm install
-npm run dev
 
-Includes splash/loading screen, main menu, play/join flow, rules, options, previous-game history, casino table, circular multiplayer seating, active-turn glow, 40-second server timer, pause/resume, challenge modal, rank selection, finishing positions, responsive layout, and local UI preferences.
+1. Set `VITE_API_URL` and `VITE_GOOGLE_CLIENT_ID` in `.env` (see `.env.example`).
+2. Run `npm ci`.
+3. Run `npm run dev`.
+
+For local cookie authentication, use the same hostname for the frontend and API. Production sign-in requires an HTTPS API endpoint and a matching Google OAuth web client ID.
+
+Includes the responsive table, synthesized menu/game audio, rules, options, authenticated match history, turn timer, pause/resume, challenge modal, rank selection, and two-player **Close Round** action. Game action requests never send a player ID; the API binds each request to the authenticated seat.
