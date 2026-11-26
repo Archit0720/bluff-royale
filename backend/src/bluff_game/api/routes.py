@@ -4,7 +4,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .auth_routes import current_identity
-from .schemas import ActionRequest, EmoteRequest, NameRequest, PlayRequest
+from .schemas import ActionRequest, DialogueRequest, EmoteRequest, NameRequest, PlayRequest
 
 router = APIRouter(prefix="/games", tags=["games"])
 
@@ -26,8 +26,17 @@ def fail(error):
     )
 
 
-def state(room, player_id):
+def state(room, player_id, presence):
     data = room.game.visible_state(player_id)
+    data["players"] = [
+        {
+            **item,
+            "picture": getattr(room, "seat_profiles", {}).get(item["id"], {}).get("picture"),
+            "presence": presence.get(item["id"], "online"),
+            "on_hold": room.paused_by == item["id"],
+        }
+        for item in data["players"]
+    ]
     data.update(
         {
             "room_code": room.id,
@@ -56,9 +65,11 @@ async def create(
     identity=Depends(current_identity),
 ):
     try:
+        profile = request.app.state.auth.profile(identity.user_id) or {}
         room, player = await manager(request).create(
             body.player_name,
             identity.user_id,
+            profile,
         )
         return {
             "game_id": room.id,
@@ -79,6 +90,7 @@ async def room(
         service = manager(request)
         game_room = await service.get_for_user(gid, identity.user_id)
         player = service.player_for_user(game_room, identity.user_id)
+        presence = await service.store.room_presence(game_room.id)
         return {
             "game_id": game_room.id,
             "status": game_room.status,
@@ -90,6 +102,9 @@ async def room(
                     "id": item.id,
                     "name": item.name,
                     "card_count": item.card_count,
+                    "picture": getattr(game_room, "seat_profiles", {}).get(item.id, {}).get("picture"),
+                    "presence": presence.get(item.id, "online"),
+                    "on_hold": game_room.paused_by == item.id,
                 }
                 for item in game_room.players
             ],
@@ -112,11 +127,40 @@ async def emote(
         player = service.player_for_user(game_room, identity.user_id)
         if game_room.game is None:
             raise RuntimeError("The game has not started.")
+        if game_room.paused:
+            raise RuntimeError("The game is paused.")
         if game_room.game.status.value != "playing":
             raise RuntimeError("Emotes are only available during a game.")
         event = {
             "player_id": player.id,
             "emote": body.emote,
+            "created_at": time.time(),
+        }
+        await service.store.publish_emote(game_room.id, event)
+        return {"sent": True}
+    except (KeyError, PermissionError, ValueError, RuntimeError) as error:
+        raise fail(error) from error
+
+
+@router.post("/{gid}/dialogue")
+async def dialogue(
+    gid: str,
+    body: DialogueRequest,
+    request: Request,
+    identity=Depends(current_identity),
+):
+    try:
+        service = manager(request)
+        game_room = await service.get_for_user(gid, identity.user_id)
+        player = service.player_for_user(game_room, identity.user_id)
+        if game_room.game is None or game_room.game.status.value != "playing":
+            raise RuntimeError("Dialogues are only available during a game.")
+        if game_room.paused:
+            raise RuntimeError("The game is paused.")
+        event = {
+            "player_id": player.id,
+            "kind": "dialogue",
+            "dialogue": body.dialogue,
             "created_at": time.time(),
         }
         await service.store.publish_emote(game_room.id, event)
@@ -133,10 +177,12 @@ async def join(
     identity=Depends(current_identity),
 ):
     try:
+        profile = request.app.state.auth.profile(identity.user_id) or {}
         player = await manager(request).join(
             gid,
             body.player_name,
             identity.user_id,
+            profile,
         )
         return {
             "game_id": gid.upper(),
@@ -174,7 +220,8 @@ async def private_state(
         game_room = await service.get_for_user(gid, identity.user_id)
         player = service.player_for_user(game_room, identity.user_id)
         active_game(game_room)
-        return state(game_room, player.id)
+        presence = await service.store.room_presence(game_room.id)
+        return state(game_room, player.id, presence)
     except (KeyError, PermissionError, ValueError, RuntimeError) as error:
         raise fail(error) from error
 
@@ -298,5 +345,22 @@ async def resume(
         player = service.player_for_user(game_room, identity.user_id)
         await service.resume(game_room, player.id, identity.user_id)
         return {"paused": False}
+    except (KeyError, PermissionError, ValueError, RuntimeError) as error:
+        raise fail(error) from error
+
+
+@router.post("/{gid}/leave")
+async def leave(
+    gid: str,
+    body: ActionRequest,
+    request: Request,
+    identity=Depends(current_identity),
+):
+    try:
+        service = manager(request)
+        game_room = await service.get_for_user(gid, identity.user_id)
+        player = service.player_for_user(game_room, identity.user_id)
+        await service.leave(game_room, player.id, identity.user_id)
+        return {"left": True}
     except (KeyError, PermissionError, ValueError, RuntimeError) as error:
         raise fail(error) from error

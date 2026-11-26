@@ -1,4 +1,5 @@
 import random
+import time
 from dataclasses import dataclass
 from enum import Enum
 from .card import Card,Rank,Suit
@@ -29,7 +30,7 @@ class BluffGame:
  def start(self,seed=None):
   d=Deck();d.shuffle(random.Random(seed));hands=d.deal(len(self.players))
   for p,h in zip(self.players,hands,strict=True):p.hand=h;p.sort_hand()
-  ace=Card(Rank.ACE,Suit.SPADES);self.current_player_index=next(i for i,p in enumerate(self.players)if ace in p.hand);self.status=GameStatus.PLAYING;self.event_log.append({'type':'start','player_id':self.current_player.id})
+  ace=Card(Rank.ACE,Suit.SPADES);self.current_player_index=next(i for i,p in enumerate(self.players)if ace in p.hand);self.status=GameStatus.PLAYING;self._record({'type':'start','player_id':self.current_player.id})
  def play(self,pid,indices,rank=None):
   self._turn(pid)
   if self.current_rank is None:
@@ -38,17 +39,17 @@ class BluffGame:
   elif rank is not None and rank!=self.current_rank:raise ValueError('The claimed rank cannot change during an active round.')
   p=self.current_player;cards=p.play_cards(indices);play=Play(pid,tuple(cards),self.current_rank);self._confirm_except(pid);self.pile.extend(cards);self.last_play=play;self.skipped_since_last_play.clear()
   if p.card_count==0 and pid not in self.provisional_finishers:self.provisional_finishers.append(pid)
-  self.event_log.append({'type':'play','player_id':pid,'count':len(cards),'rank':self.current_rank.value});self._advance();return play
+  self._record({'type':'play','player_id':pid,'count':len(cards),'rank':self.current_rank.value});self._advance();return play
  def skip(self,pid):
   self._turn(pid)
   if self.last_play is None:raise RuntimeError('The round starter cannot skip before any cards are played.')
-  last=self.last_play.player_id;newly=self._confirm_except(last);self.skipped_since_last_play.add(pid);self.event_log.append({'type':'skip','player_id':pid})
+  last=self.last_play.player_id;newly=self._confirm_except(last);self.skipped_since_last_play.add(pid);self._record({'type':'skip','player_id':pid})
   if self.status==GameStatus.FINISHED:
    n=len(self.pile);self.discard_pile.extend(self.pile);self.pile.clear();return SkipResult(pid,True,n,None,tuple(newly))
   required={p.id for p in self.active_players if p.id!=last}
   if required.issubset(self.skipped_since_last_play):
    if len(self.active_players)==2 and self._eligible(last):
-    self._set(last);self.event_log.append({'type':'return_to_contributor','player_id':last});return SkipResult(pid,False,0,last,tuple(newly))
+    self._set(last);self._record({'type':'return_to_contributor','player_id':last});return SkipResult(pid,False,0,last,tuple(newly))
    n=len(self.pile);self.discard_pile.extend(self.pile);self.pile.clear();newly+=self._confirm_all()
    if self._complete():return SkipResult(pid,True,n,None,tuple(newly))
    starter=last if self._eligible(last) else self._next(last).id;self._new_round(starter);return SkipResult(pid,True,n,starter,tuple(newly))
@@ -56,7 +57,7 @@ class BluffGame:
  def close_round(self,pid):
   self._turn(pid)
   if 'close_round' not in self.available_actions(pid):raise RuntimeError('The round cannot be closed right now.')
-  n=len(self.pile);self.discard_pile.extend(self.pile);self.pile.clear();newly=self._confirm_all()
+  n=len(self.pile);self.discard_pile.extend(self.pile);self.pile.clear();newly=self._confirm_all();self._record({'type':'close_round','player_id':pid,'discarded_count':n})
   if self._complete():return CloseRoundResult(pid,n,None,tuple(newly))
   self._new_round(pid);return CloseRoundResult(pid,n,pid,tuple(newly))
  def challenge(self,pid):
@@ -66,7 +67,7 @@ class BluffGame:
   if challenged.player_id==pid:raise ValueError('A player cannot challenge their own contribution.')
   bluff=challenged.was_bluff;loser=challenged.player_id if bluff else pid;starter=pid if bluff else challenged.player_id;n=len(self.pile);self.get_player(loser).receive_cards(self.pile);self.pile.clear()
   if loser in self.provisional_finishers:self.provisional_finishers.remove(loser)
-  newly=self._confirm_all();self.event_log.append({'type':'challenge','challenger_id':pid,'challenged_id':challenged.player_id,'was_bluff':bluff,'loser_id':loser,'pile':n});next_starter=None
+  newly=self._confirm_all();self._record({'type':'challenge','challenger_id':pid,'challenged_id':challenged.player_id,'was_bluff':bluff,'loser_id':loser,'pile':n,'revealed_cards':[str(card)for card in challenged.cards]});next_starter=None
   if not self._complete():next_starter=starter if self._eligible(starter)else self._next(starter).id;self._new_round(next_starter)
   return ChallengeResult(pid,challenged.player_id,bluff,loser,n,challenged.cards,next_starter,tuple(newly))
  def available_actions(self,pid):
@@ -80,6 +81,8 @@ class BluffGame:
   for p in self.players:
    if p.id==pid:return p
   raise KeyError('Unknown player ID.')
+ def _record(self,event):
+  self.event_log.append({**event,'at':time.time()})
  def _turn(self,pid):
   if self.status!=GameStatus.PLAYING:raise RuntimeError('The game is not active.')
   if self.current_player.id!=pid:raise ValueError("It is not this player's turn.")
@@ -106,6 +109,6 @@ class BluffGame:
   if len(remaining)==1 and len(self.finishing_order)+len(self.provisional_finishers)==len(self.players)-1:
    self._confirm_all();remaining=[p.id for p in self.players if p.id not in self.finishing_order]
    if len(remaining)==1:self.finishing_order.append(remaining[0])
-   self.status=GameStatus.FINISHED;self.current_rank=None;self.last_play=None;self.skipped_since_last_play.clear();self.event_log.append({'type':'finished'});return True
+   self.status=GameStatus.FINISHED;self.current_rank=None;self.last_play=None;self.skipped_since_last_play.clear();self._record({'type':'finished'});return True
   return False
- def _new_round(self,pid):self.current_rank=None;self.last_play=None;self.skipped_since_last_play.clear();self._set(pid);self.event_log.append({'type':'new_round','player_id':pid})
+ def _new_round(self,pid):self.current_rank=None;self.last_play=None;self.skipped_since_last_play.clear();self._set(pid)

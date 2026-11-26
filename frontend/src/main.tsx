@@ -20,6 +20,7 @@ type Screen =
 type Session = { gameId: string; playerId: string; name: string };
 type Profile = { display_name: string; picture: string | null };
 type EmoteName = 'laugh' | 'wow' | 'clap' | 'heart' | 'bluff';
+type DialogueName = 'bold_move' | 'prove_it' | 'eyes_on_you' | 'nice_try' | 'royal_bluff' | 'well_played';
 type AuthState =
   | { status: 'checking' }
   | { status: 'signed_out' }
@@ -29,6 +30,47 @@ type AuthState =
 const R = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const sym: Record<string, string> = { H: '♥', D: '♦', C: '♣', S: '♠' };
 const ord = (n: number) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
+const dialogueOptions: { name: DialogueName; label: string }[] = [
+  { name: 'bold_move', label: 'Bold move.' },
+  { name: 'prove_it', label: 'Prove it!' },
+  { name: 'eyes_on_you', label: "I've got my eye on you." },
+  { name: 'nice_try', label: 'Nice try.' },
+  { name: 'royal_bluff', label: 'Royal bluff.' },
+  { name: 'well_played', label: 'Well played.' },
+];
+
+function describeEvent(event: any, players: any[]) {
+  const nameOf = (id: string) => players.find((player) => player.id === id)?.name || 'A player';
+  switch (event.type) {
+    case 'play':
+      return { title: `${nameOf(event.player_id)} played ${event.count} ${event.count === 1 ? 'card' : 'cards'}`, detail: `Claiming ${event.rank}`, result: false };
+    case 'skip':
+    case 'timeout_skip':
+      return { title: `${nameOf(event.player_id)} skipped`, detail: 'The table keeps moving.', result: false };
+    case 'challenge':
+      return {
+        title: event.was_bluff ? 'BLUFF CAUGHT' : 'THE CLAIM WAS TRUE',
+        detail: `${nameOf(event.challenger_id)} challenged ${nameOf(event.challenged_id)}. ${nameOf(event.loser_id)} takes ${event.pile} cards.${event.revealed_cards?.length ? ` Revealed: ${event.revealed_cards.join(' · ')}` : ''}`,
+        result: true,
+      };
+    case 'close_round':
+      return { title: `${nameOf(event.player_id)} closed the round`, detail: `${event.discarded_count} cards cleared from the pot.`, result: false };
+    case 'return_to_contributor':
+      return { title: 'BACK TO THE CONTRIBUTOR', detail: `${nameOf(event.player_id)} may add cards or close the round.`, result: false };
+    case 'pause':
+      return { title: 'TABLE ON HOLD', detail: `${nameOf(event.player_id)} paused the game.`, result: false };
+    case 'resume':
+      return { title: 'BACK IN PLAY', detail: `${nameOf(event.player_id)} resumed the game.`, result: false };
+    case 'leave':
+      return { title: `${nameOf(event.player_id)} LEFT THE TABLE`, detail: 'Their seat remains visible for the rest of the match.', result: false };
+    case 'timeout_pause':
+      return { title: 'TABLE ON HOLD', detail: 'The turn timed out. The game is paused.', result: false };
+    case 'finished':
+      return { title: 'THE TABLE IS SETTLED', detail: 'Final standings are in.', result: true };
+    default:
+      return null;
+  }
+}
 
 function App() {
   const [screen, setScreen] = useState<Screen>('splash');
@@ -46,15 +88,25 @@ function App() {
   const [authIntent, setAuthIntent] = useState<'play' | 'history' | null>(null);
   const [returnScreen, setReturnScreen] = useState<Screen>('menu');
   const [busy, setBusy] = useState(false);
-  const [modal, setModal] = useState<any>(null);
   const [pausePanel, setPausePanel] = useState<'menu' | 'options'>('menu');
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [sendingEmote, setSendingEmote] = useState(false);
+  const [sendingDialogue, setSendingDialogue] = useState(false);
+  const [announcement, setAnnouncement] = useState<any>(null);
   const [sound, setSound] = useState(localStorage.getItem('br_sound') !== 'off');
   const [motion, setMotion] = useState(localStorage.getItem('br_motion') !== 'off');
   const [history, setHistory] = useState<any[]>([]);
   const signingIn = useRef(false);
   const pendingAction = useRef<(() => Promise<any>) | null>(null);
+  const lastReactionAt = useRef(0);
+  const latestGameEvent = game?.recent_events?.[game.recent_events.length - 1];
+
+  useEffect(() => {
+    if (!latestGameEvent?.at) return;
+    setAnnouncement(latestGameEvent);
+    const timer = window.setTimeout(() => setAnnouncement(null), 5200);
+    return () => window.clearTimeout(timer);
+  }, [latestGameEvent?.at]);
 
   useEffect(() => {
     let active = true;
@@ -236,7 +288,8 @@ function App() {
   }
 
   async function sendEmote(emote: EmoteName) {
-    if (!session || sendingEmote) return;
+    if (!session || sendingEmote || Date.now() - lastReactionAt.current < 650) return;
+    lastReactionAt.current = Date.now();
     setSendingEmote(true);
     try {
       await api.emote(session.gameId, emote);
@@ -244,6 +297,36 @@ function App() {
       await handleRequestError(cause);
     } finally {
       setSendingEmote(false);
+    }
+  }
+
+  async function sendDialogue(dialogue: DialogueName) {
+    if (!session || sendingDialogue || Date.now() - lastReactionAt.current < 650) return;
+    lastReactionAt.current = Date.now();
+    setSendingDialogue(true);
+    try {
+      await api.dialogue(session.gameId, dialogue);
+    } catch (cause) {
+      await handleRequestError(cause);
+    } finally {
+      setSendingDialogue(false);
+    }
+  }
+
+  async function leaveTable() {
+    if (!session) return;
+    setBusy(true);
+    try {
+      await api.leave(session.gameId);
+      setSession(null);
+      setRoom(null);
+      setGame(null);
+      setConfirmQuit(false);
+      setScreen('menu');
+    } catch (cause) {
+      await handleRequestError(cause);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -268,7 +351,14 @@ function App() {
     return <button className="account-signin" onClick={() => requestEntry('play')}>SIGN IN</button>;
   }
 
-  useRoyaleAudio(sound, screen === 'game' && game?.status === 'playing', game?.pile_size ?? 0);
+  useRoyaleAudio(
+    sound,
+    screen === 'game' && game?.status === 'playing',
+    game?.pile_size ?? 0,
+    latestGameEvent?.at
+      ? `${latestGameEvent.type}:${latestGameEvent.type === 'challenge' ? latestGameEvent.was_bluff ? 'bluff' : 'truth' : ''}:${latestGameEvent.at}`
+      : '',
+  );
 
   if (screen === 'splash') {
     return (
@@ -433,7 +523,11 @@ function App() {
           <p>Invite players with this room code</p>
           <div className="seats">
             {room?.players.map((player: any, index: number) => (
-              <div className="seat" key={player.id}><div>{player.name[0]}</div><b>{player.name}</b><small>{index === 0 ? 'HOST' : 'READY'}</small></div>
+              <div className="seat" key={player.id}>
+                <div className="seat-avatar">{player.picture ? <img src={player.picture} alt="" referrerPolicy="no-referrer" /> : player.name[0]?.toUpperCase()}</div>
+                <b>{player.name}</b>
+                <small>{player.on_hold ? 'ON HOLD' : player.presence === 'left' ? 'LEFT' : index === 0 ? 'HOST' : 'READY'}</small>
+              </div>
             ))}
             {Array.from({ length: Math.max(0, 6 - (room?.players.length || 0)) }).map((_, index) => (
               <div className="seat vacant" key={index}><div>+</div><b>OPEN SEAT</b><small>WAITING</small></div>
@@ -462,9 +556,18 @@ function App() {
             <span className="eyebrow">FINAL TABLE</span><h2>STANDINGS</h2>
             {game.finishing_order.map((id: string, index: number) => {
               const player = game.players.find((item: any) => item.id === id);
-              return <div key={id}><b>{ord(index + 1)}</b><span>{player?.name}</span>{id === session.playerId && <em>YOU</em>}</div>;
+              return (
+                <article className={`leader-row place-${index + 1}`} key={id}>
+                  <b className="leader-rank">{index < 3 ? ['♛', '♜', '♜'][index] : ord(index + 1)}</b>
+                  <div className="leader-avatar">{player?.picture ? <img src={player.picture} alt="" referrerPolicy="no-referrer" /> : player?.name?.slice(0, 1).toUpperCase()}</div>
+                  <span>{player?.name}</span>
+                  {id === session.playerId && <em>YOU</em>}
+                  {index === 0 && <strong>CHAMPION</strong>}
+                </article>
+              );
             })}
-            <button className="gold" onClick={() => location.reload()}>RETURN TO LOBBY</button>
+            <p className="leader-caption">The cards have spoken. The table remembers.</p>
+            <button className="gold" onClick={() => { setSession(null); setRoom(null); setGame(null); setScreen('menu'); }}>RETURN TO MENU</button>
           </section>
         </main>
       );
@@ -483,6 +586,7 @@ function App() {
       .filter((item: any) => Date.now() / 1000 - item.created_at < 5)
       .slice(0, 4)
       .reverse();
+    const tableAnnouncement = announcement && describeEvent(announcement, game.players);
     const toggleCard = (index: number) => setSelected((current) =>
       current.includes(index) ? current.filter((item) => item !== index) : [...current, index],
     );
@@ -495,20 +599,28 @@ function App() {
           <button onClick={() => void run(() => game.paused ? api.resume(session.gameId, session.playerId) : api.pause(session.gameId, session.playerId))}>{game.paused ? '▶ RESUME' : 'Ⅱ PAUSE'}</button>
         </header>
         <RoyaleTable game={game} playerId={session.playerId} motion={motion} />
+        {tableAnnouncement && (
+          <div className={`table-announcement${tableAnnouncement.result ? ' result' : ''}`} role="status" aria-live="polite">
+            <b>{tableAnnouncement.title}</b><span>{tableAnnouncement.detail}</span>
+          </div>
+        )}
         {recentEmotes.length > 0 && (
           <div className="emote-feed" aria-live="polite">
             {recentEmotes.map((item: any) => (
-              <span key={`${item.player_id}-${item.created_at}`}>
-                {game.players.find((player: any) => player.id === item.player_id)?.name || 'Player'}
-                {' '}
-                {emoteOptions.find((option) => option.name === item.emote)?.symbol}
+              <span key={`${item.player_id}-${item.created_at}`} className={item.kind === 'dialogue' ? 'dialogue-reaction' : item.kind === 'system' ? 'system-reaction' : 'emote-reaction'}>
+                {item.kind === 'dialogue'
+                  ? dialogueOptions.find((option) => option.name === item.dialogue)?.label
+                  : item.kind === 'system' && item.system_event === 'leave'
+                    ? 'LEFT THE TABLE'
+                    : emoteOptions.find((option) => option.name === item.emote)?.symbol}
+                <small>{game.players.find((player: any) => player.id === item.player_id)?.name || 'Player'}</small>
               </span>
             ))}
           </div>
         )}
         <section className="hud">
           <div className="message">
-            {game.paused ? <b>GAME PAUSED</b> : starter ? <><b>YOU OPEN THE ROUND</b><span>Choose the rank you want everyone to claim.</span></> : turn ? <><b>YOUR MOVE</b><span>Play, challenge the latest claim, or skip.</span></> : <><b>{game.players.find((player: any) => player.id === game.current_player_id)?.name}'S TURN</b><span>Watch the table. Remember every claim.</span></>}
+            {game.paused ? <><b>TABLE ON HOLD</b><span>{game.players.find((player: any) => player.id === game.paused_by)?.name || 'The table'} paused the game.</span></> : starter ? <><b>YOU OPEN THE ROUND</b><span>Choose the rank you want everyone to claim.</span></> : turn ? <><b>YOUR MOVE</b><span>Play, challenge the latest claim, or skip.</span></> : <><b>{game.players.find((player: any) => player.id === game.current_player_id)?.name}'S TURN</b><span>Watch the table. Remember every claim.</span></>}
           </div>
           {starter && <div className="rankbar">{R.map((item) => <button key={item} className={item === rank ? 'selected' : ''} onClick={() => setRank(item)}>{item}</button>)}</div>}
           <div className="cards">{game.your_hand.map((card: string, index: number) => {
@@ -520,7 +632,7 @@ function App() {
               await api.play(session.gameId, session.playerId, selected, starter ? rank : undefined);
               setSelected([]);
             })}>PLAY {selected.length || ''}</button>
-            {game.available_actions.includes('challenge') && <button className="bluff" disabled={game.paused} onClick={() => void run(async () => setModal(await api.challenge(session.gameId, session.playerId)))}>CALL BLUFF</button>}
+            {game.available_actions.includes('challenge') && <button className="bluff" disabled={game.paused} onClick={() => void run(() => api.challenge(session.gameId, session.playerId))}>CALL BLUFF</button>}
             {game.available_actions.includes('skip') && <button className="skip" disabled={game.paused} onClick={() => void run(() => api.skip(session.gameId, session.playerId))}>SKIP</button>}
             {game.available_actions.includes('close_round') && <button className="skip" disabled={game.paused} onClick={() => void run(() => api.closeRound(session.gameId, session.playerId))}>CLOSE ROUND</button>}
           </div>
@@ -532,11 +644,17 @@ function App() {
                 type="button"
                 aria-label={`Send ${option.label} emote`}
                 title={option.label}
-                disabled={sendingEmote || game.status !== 'playing'}
+                disabled={sendingEmote || game.status !== 'playing' || game.paused}
                 onClick={() => void sendEmote(option.name)}
               >
                 {option.symbol}
               </button>
+            ))}
+          </div>
+          <div className="dialogue-bar" aria-label="Send a preset dialogue">
+            <span>TABLE TALK</span>
+            {dialogueOptions.map((option) => (
+              <button key={option.name} type="button" disabled={sendingDialogue || game.paused} onClick={() => void sendDialogue(option.name)}>{option.label}</button>
             ))}
           </div>
           {error && <div className="err" role="alert">{error}</div>}
@@ -546,14 +664,8 @@ function App() {
             {confirmQuit ? (
               <article className="pause-card">
                 <h2>QUIT TO MENU?</h2>
-                <p>The table will stay open for the other players. Your seat remains in the match and follows normal turn timeouts.</p>
-                <button className="gold" onClick={() => {
-                  setSession(null);
-                  setRoom(null);
-                  setGame(null);
-                  setConfirmQuit(false);
-                  setScreen('menu');
-                }}>LEAVE TABLE</button>
+                <p>Your seat stays visible as LEFT. Turns will continue using the normal timeout rules.</p>
+                <button className="gold" disabled={busy} onClick={() => void leaveTable()}>{busy ? 'LEAVING…' : 'LEAVE TABLE'}</button>
                 <button className="dark" onClick={() => setConfirmQuit(false)}>CANCEL</button>
               </article>
             ) : pausePanel === 'options' ? (
@@ -569,15 +681,18 @@ function App() {
               <article className="pause-card">
                 <div>Ⅱ</div>
                 <h2>TABLE PAUSED</h2>
-                <p>Turn clock frozen at {game.turn_seconds_left}s</p>
-                <button className="gold" onClick={() => void run(() => api.resume(session.gameId, session.playerId))}>RESUME GAME</button>
+                <p>{game.paused_by === 'system' ? `Turn clock frozen at ${game.turn_seconds_left}s` : `${game.players.find((player: any) => player.id === game.paused_by)?.name || 'A player'} put the table on hold.`}</p>
+                {(game.paused_by === session.playerId || game.paused_by === 'system' || room?.is_host || game.players.find((player: any) => player.id === game.paused_by)?.presence === 'left') ? (
+                  <button className="gold" onClick={() => void run(() => api.resume(session.gameId, session.playerId))}>RESUME GAME</button>
+                ) : (
+                  <p className="waiting-host" role="status">WAITING FOR THE HOST OR PAUSING PLAYER</p>
+                )}
                 <button className="dark" onClick={() => setPausePanel('options')}>OPTIONS</button>
                 <button className="quit-button" onClick={() => setConfirmQuit(true)}>QUIT TO MENU</button>
               </article>
             )}
           </div>
         )}
-        {modal && <div className="modal"><article><span>{modal.was_bluff ? 'CAUGHT' : 'TRUTH'}</span><h2>{modal.was_bluff ? 'BLUFF!' : 'BAD CALL!'}</h2><p>Revealed cards: <b>{modal.revealed_cards?.join(' · ')}</b></p><p><b>{game.players.find((player: any) => player.id === modal.loser_id)?.name}</b> takes the entire pile of {modal.picked_up_count} cards.</p><button className="gold" onClick={() => setModal(null)}>BACK TO TABLE</button></article></div>}
       </main>
     );
   }

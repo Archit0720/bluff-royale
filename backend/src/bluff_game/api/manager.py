@@ -22,6 +22,7 @@ class Room:
     started_at: float = 0
     history_saved: bool = False
     seat_users: dict[str, str] = field(default_factory=dict)
+    seat_profiles: dict[str, dict] = field(default_factory=dict)
 
     @property
     def status(self):
@@ -44,8 +45,9 @@ class Manager:
 
     async def get_for_user(self, gid, user_id):
         room = await self.get(gid)
-        self.player_for_user(room, user_id)
+        player = self.player_for_user(room, user_id)
         await self.apply_timeout(room)
+        await self.store.touch_presence(room.id, player.id)
         return room
 
     def player_for_user(self, room, user_id):
@@ -62,7 +64,7 @@ class Manager:
             raise PermissionError("You are not a member of this room.")
         return player
 
-    async def create(self, name, user_id):
+    async def create(self, name, user_id, profile=None):
         name = name.strip()
         if not name:
             raise ValueError("Player name cannot be empty.")
@@ -73,11 +75,13 @@ class Manager:
             [player],
             user_id,
             seat_users={player.id: user_id},
+            seat_profiles={player.id: profile or {}},
         )
         await self.save(room)
+        await self.store.touch_presence(room.id, player.id)
         return room, player
 
-    async def join(self, gid, name, user_id):
+    async def join(self, gid, name, user_id, profile=None):
         async with self.store.room_lock(gid.upper()):
             room = await self.get(gid)
             name = name.strip()
@@ -96,8 +100,25 @@ class Manager:
             player = Player(secrets.token_urlsafe(12), name)
             room.players.append(player)
             room.seat_users[player.id] = user_id
+            if not hasattr(room, "seat_profiles"):
+                room.seat_profiles = {}
+            room.seat_profiles[player.id] = profile or {}
             await self.save(room)
+            await self.store.touch_presence(room.id, player.id)
             return player
+
+    async def leave(self, room, player_id, user_id):
+        self.player_for_user(room, user_id)
+        await self.store.mark_left(room.id, player_id)
+        await self.store.publish_emote(
+            room.id,
+            {
+                "player_id": player_id,
+                "kind": "system",
+                "system_event": "leave",
+                "created_at": time.time(),
+            },
+        )
 
     async def start(self, gid, user_id):
         async with self.store.room_lock(gid.upper()):
@@ -141,9 +162,7 @@ class Manager:
             self._pause_after_timeout(room, player_id)
         elif room.game.last_play is not None:
             room.game.skip(player_id)
-            room.game.event_log.append(
-                {"type": "timeout_skip", "player_id": player_id}
-            )
+            room.game._record({"type": "timeout_skip", "player_id": player_id})
             self.reset_timer(room)
         else:
             self._pause_after_timeout(room, player_id)
@@ -157,9 +176,7 @@ class Manager:
         room.paused_by = "system"
         room.paused_seconds_left = TURN_SECONDS
         room.turn_deadline = None
-        room.game.event_log.append(
-            {"type": "timeout_pause", "player_id": player_id}
-        )
+        room.game._record({"type": "timeout_pause", "player_id": player_id})
 
     async def pause(self, room, player_id, user_id):
         self.player_for_user(room, user_id)
@@ -174,6 +191,7 @@ class Manager:
             int((room.turn_deadline or time.time()) - time.time()),
         )
         room.turn_deadline = None
+        room.game._record({"type": "pause", "player_id": player_id})
         await self.save(room)
 
     async def resume(self, room, player_id, user_id):
@@ -182,9 +200,11 @@ class Manager:
             raise RuntimeError("The game has not started.")
         if not room.paused:
             raise RuntimeError("Game is not paused.")
+        presence = await self.store.room_presence(room.id)
         if (
             room.paused_by not in ("system", player_id)
             and room.creator_id != user_id
+            and presence.get(room.paused_by) != "left"
         ):
             raise PermissionError("Only the pausing player or room creator can resume.")
         room.paused = False
@@ -193,4 +213,5 @@ class Manager:
             room.paused_seconds_left or TURN_SECONDS
         )
         room.paused_seconds_left = None
+        room.game._record({"type": "resume", "player_id": player_id})
         await self.save(room)

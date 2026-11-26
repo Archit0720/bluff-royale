@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import './royale-table.css';
 
-type Seat = {id:string; name:string; card_count:number; position?:number|null; provisional?:boolean};
-type TableState = {players:Seat[]; current_player_id:string|null; current_rank:string|null; pile_size:number; turn_seconds_left:number; paused:boolean; last_play?:{player_id:string; card_count:number; claimed_rank:string}|null};
+type Seat = {id:string; name:string; picture?:string|null; presence?:'online'|'left'; on_hold?:boolean; card_count:number; position?:number|null; provisional?:boolean};
+type TableState = {players:Seat[]; current_player_id:string|null; current_rank:string|null; pile_size:number; turn_seconds_left:number; paused:boolean; paused_by?:string|null; last_play?:{player_id:string; card_count:number; claimed_rank:string}|null};
 const layouts = [[], [[50,90]], [[50,90],[50,10]], [[50,90],[16,21],[84,21]], [[50,90],[13,50],[50,10],[87,50]], [[50,90],[14,68],[23,17],[77,17],[86,68]], [[50,90],[13,66],[21,20],[50,9],[79,20],[87,66]]];
 const suits = ['\u2660','\u2665','\u2663','\u2666'];
 const ordinal = (n:number) => `${n}${n===1?'st':n===2?'nd':n===3?'rd':'th'}`;
@@ -33,10 +33,10 @@ export default function RoyaleTable({game,playerId,motion}: {game:TableState;pla
     <div className="rt-count"><b>{game.pile_size}</b> {game.pile_size===1?'card':'cards'} in the pot</div>
     {last && <p className="rt-last">{order.find(p=>p.id===last.player_id)?.name} claimed <b>{last.card_count} &times; {last.claimed_rank}</b></p>}
     {order.map((p,i)=>{const [x,y]=locations[i];const active=p.id===game.current_player_id;
-      return <div key={p.id} className={'rt-seat'+(active?' rt-active':'')+(p.position?' rt-finished':'')} style={{left:`${x}%`,top:`${y}%`}}>
-        <div className="rt-avatar" aria-hidden="true">{suits[i%4]}</div>
+      return <div key={p.id} className={'rt-seat'+(active?' rt-active':'')+(p.position?' rt-finished':'')+(p.presence==='left'?' rt-left':'')+(p.on_hold?' rt-on-hold':'')} style={{left:`${x}%`,top:`${y}%`}}>
+        <div className="rt-avatar">{p.picture ? <img src={p.picture} alt="" referrerPolicy="no-referrer" /> : <span aria-hidden="true">{p.name.slice(0,1).toUpperCase() || suits[i%4]}</span>}</div>
         <b title={p.name}>{p.id===playerId?'You':p.name}</b>
-        <small>{p.position?`${ordinal(p.position)} place`:p.provisional?'Finish pending':`${p.card_count} cards`}</small>
+        <small>{p.on_hold?'ON HOLD':p.presence==='left'?'LEFT':p.position?`${ordinal(p.position)} place`:p.provisional?'Finish pending':`${p.card_count} cards`}</small>
         {active&&<span className={'rt-clock'+(game.turn_seconds_left<=10?' rt-urgent':'')} aria-label={game.paused?'Paused turn':`Turn: ${game.turn_seconds_left} seconds left`}>{game.paused?'II':game.turn_seconds_left}</span>}
       </div>;
     })}

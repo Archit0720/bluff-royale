@@ -9,6 +9,7 @@ from redis.asyncio import Redis
 
 EMOTE_TTL_SECONDS = 30
 EMOTE_LIMIT = 18
+PRESENCE_TTL_SECONDS = 12
 
 
 class RoomStore(ABC):
@@ -32,12 +33,25 @@ class RoomStore(ABC):
     async def recent_emotes(self, key):
         ...
 
+    @abstractmethod
+    async def touch_presence(self, key, player_id):
+        ...
+
+    @abstractmethod
+    async def mark_left(self, key, player_id):
+        ...
+
+    @abstractmethod
+    async def room_presence(self, key):
+        ...
+
 
 class MemoryRoomStore(RoomStore):
     def __init__(self):
         self.data = {}
         self.locks = {}
         self.emotes = {}
+        self.presence = {}
 
     async def get(self, key):
         return self.data.get(key)
@@ -47,6 +61,8 @@ class MemoryRoomStore(RoomStore):
 
     async def delete(self, key):
         self.data.pop(key, None)
+        self.emotes.pop(key, None)
+        self.presence.pop(key, None)
 
     async def publish_emote(self, key, event):
         recent = [
@@ -65,6 +81,30 @@ class MemoryRoomStore(RoomStore):
         ]
         self.emotes[key] = recent
         return recent
+
+    async def touch_presence(self, key, player_id):
+        room = self.presence.setdefault(key, {})
+        current = room.get(player_id)
+        if current is None or current["status"] != "left":
+            room[player_id] = {"status": "online", "at": time.time()}
+
+    async def mark_left(self, key, player_id):
+        self.presence.setdefault(key, {})[player_id] = {
+            "status": "left",
+            "at": time.time(),
+        }
+
+    async def room_presence(self, key):
+        now = time.time()
+        return {
+            player_id: (
+                "left"
+                if event["status"] == "left"
+                or now - event["at"] > PRESENCE_TTL_SECONDS
+                else "online"
+            )
+            for player_id, event in self.presence.get(key, {}).items()
+        }
 
     @asynccontextmanager
     async def room_lock(self, key):
@@ -91,7 +131,11 @@ class RedisRoomStore(RoomStore):
         await self.client.set(f"bluff:room:{key}", pickle.dumps(value), ex=ttl)
 
     async def delete(self, key):
-        await self.client.delete(f"bluff:room:{key}")
+        await self.client.delete(
+            f"bluff:room:{key}",
+            f"bluff:room-emotes:{key}",
+            f"bluff:room-presence:{key}",
+        )
 
     async def publish_emote(self, key, event):
         redis_key = f"bluff:room-emotes:{key}"
@@ -110,6 +154,48 @@ class RedisRoomStore(RoomStore):
             EMOTE_LIMIT - 1,
         )
         return [json.loads(entry) for entry in entries]
+
+    async def touch_presence(self, key, player_id):
+        redis_key = f"bluff:room-presence:{key}"
+        current = await self.client.hget(redis_key, player_id)
+        if current:
+            event = json.loads(current)
+            if event["status"] == "left":
+                return
+        await self.client.hset(
+            redis_key,
+            player_id,
+            json.dumps({"status": "online", "at": time.time()}),
+        )
+        await self.client.expire(redis_key, 86400)
+
+    async def mark_left(self, key, player_id):
+        redis_key = f"bluff:room-presence:{key}"
+        await self.client.hset(
+            redis_key,
+            player_id,
+            json.dumps({"status": "left", "at": time.time()}),
+        )
+        await self.client.expire(redis_key, 86400)
+
+    async def room_presence(self, key):
+        now = time.time()
+        entries = await self.client.hgetall(f"bluff:room-presence:{key}")
+        presence = {}
+        for raw_player_id, raw_event in entries.items():
+            player_id = (
+                raw_player_id.decode()
+                if isinstance(raw_player_id, bytes)
+                else raw_player_id
+            )
+            event = json.loads(raw_event)
+            presence[player_id] = (
+                "left"
+                if event["status"] == "left"
+                or now - event["at"] > PRESENCE_TTL_SECONDS
+                else "online"
+            )
+        return presence
 
     @asynccontextmanager
     async def room_lock(self, key):

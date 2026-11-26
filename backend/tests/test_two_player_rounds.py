@@ -137,6 +137,12 @@ def test_both_challenge_outcomes_remain_available(
     assert game.get_player(expected_loser).card_count == (
         9 if expected_loser == "second" else 3
     )
+    challenge_event = next(
+        event for event in reversed(game.event_log)
+        if event["type"] == "challenge"
+    )
+    assert challenge_event["revealed_cards"] == [str(played_card)]
+    assert challenge_event["at"] > 0
 
 
 def test_provisional_final_play_remains_challengeable():

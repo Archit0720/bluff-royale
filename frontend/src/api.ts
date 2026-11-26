@@ -49,5 +49,10 @@ export const api = {
   resume: (gameId: string, _playerId?: string) => post(`/games/${gameId}/resume`, {}),
   emote: (gameId: string, emote: 'laugh' | 'wow' | 'clap' | 'heart' | 'bluff') =>
     post(`/games/${gameId}/emote`, { emote }),
+  dialogue: (
+    gameId: string,
+    dialogue: 'bold_move' | 'prove_it' | 'eyes_on_you' | 'nice_try' | 'royal_bluff' | 'well_played',
+  ) => post(`/games/${gameId}/dialogue`, { dialogue }),
+  leave: (gameId: string) => post(`/games/${gameId}/leave`, {}),
   history: (_playerName?: string) => q('/auth/me/matches'),
 };

@@ -66,6 +66,14 @@
       "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/emote"
     },
     {
+      "source": "/api/games/:gameId/dialogue",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/dialogue"
+    },
+    {
+      "source": "/api/games/:gameId/leave",
+      "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId/leave"
+    },
+    {
       "source": "/api/games/:gameId",
       "destination": "https://bluff-royale-kuuq.onrender.com/games/:gameId"
     }

@@ -124,6 +124,12 @@ def test_two_accounts_cannot_select_another_seat_or_read_its_hand(
     sign_in(guest, "subject-guest", "guest@example.test")
     sign_in(stranger, "subject-stranger", "stranger@example.test")
 
+    with owner.app.state.history.Session.begin() as db:
+        owner_account = db.scalar(
+            select(User).where(User.google_sub == "subject-owner")
+        )
+        owner_account.picture = "https://images.example.test/owner.png"
+
     room = owner.post(
         "/games",
         json={"player_name": "Owner"},
@@ -138,6 +144,12 @@ def test_two_accounts_cannot_select_another_seat_or_read_its_hand(
     owner_room = owner.get(f"/games/{room['game_id']}")
     assert owner_room.status_code == 200
     assert owner_room.json()["is_host"] is True
+    owner_seat = next(
+        player for player in owner_room.json()["players"]
+        if player["id"] == room["player_id"]
+    )
+    assert owner_seat["picture"] == "https://images.example.test/owner.png"
+    assert owner_seat["presence"] == "online"
     assert guest.get(f"/games/{room['game_id']}").json()["is_host"] is False
     stored_room = owner.app.state.manager.store.data[room["game_id"]]
     stored_room.turn_deadline = time.time() - 1
@@ -181,6 +193,21 @@ def test_two_accounts_cannot_select_another_seat_or_read_its_hand(
     assert outsider_emote.status_code == 403
     emotes = owner.get(f"/games/{room['game_id']}").json()["recent_emotes"]
     assert {event["emote"] for event in emotes} == {"clap", "wow"}
+    dialogue = owner.post(
+        f"/games/{room['game_id']}/dialogue",
+        json={"dialogue": "prove_it"},
+        headers={"Origin": ORIGIN},
+    )
+    assert dialogue.status_code == 200
+    assert owner.get(f"/games/{room['game_id']}").json()["recent_emotes"][0][
+        "dialogue"
+    ] == "prove_it"
+    invalid_dialogue = owner.post(
+        f"/games/{room['game_id']}/dialogue",
+        json={"dialogue": "a custom message"},
+        headers={"Origin": ORIGIN},
+    )
+    assert invalid_dialogue.status_code == 422
 
     owner_state = owner.get(f"/games/{room['game_id']}/state").json()
     guest_state = guest.get(f"/games/{room['game_id']}/state").json()
@@ -190,6 +217,24 @@ def test_two_accounts_cannot_select_another_seat_or_read_its_hand(
     assert owner.get(
         f"/games/{room['game_id']}/players/{joined['player_id']}"
     ).status_code == 404
+
+    paused = owner.post(
+        f"/games/{room['game_id']}/pause",
+        json={},
+        headers={"Origin": ORIGIN},
+    )
+    assert paused.status_code == 200
+    paused_room = guest.get(f"/games/{room['game_id']}").json()
+    assert paused_room["paused"] is True
+    assert next(
+        player for player in paused_room["players"]
+        if player["id"] == room["player_id"]
+    )["on_hold"] is True
+    assert owner.post(
+        f"/games/{room['game_id']}/resume",
+        json={},
+        headers={"Origin": ORIGIN},
+    ).status_code == 200
 
     other_player_id = (
         guest_state["current_player_id"]
@@ -264,6 +309,26 @@ def test_two_accounts_cannot_select_another_seat_or_read_its_hand(
     assert stranger.get("/auth/me/matches").json() == []
     assert "owner@example.test" not in str(owner.get(f"/games/{room['game_id']}").json())
     assert "subject-owner" not in str(owner.get(f"/games/{room['game_id']}").json())
+
+    left = owner.post(
+        f"/games/{room['game_id']}/leave",
+        json={},
+        headers={"Origin": ORIGIN},
+    )
+    assert left.status_code == 200
+    guest_room_after_leave = guest.get(f"/games/{room['game_id']}").json()
+    owner_seat_after_leave = next(
+        player for player in guest_room_after_leave["players"]
+        if player["id"] == room["player_id"]
+    )
+    assert owner_seat_after_leave["presence"] == "left"
+    guest_events = guest_room_after_leave["recent_emotes"]
+    assert any(
+        event["kind"] == "system"
+        and event["system_event"] == "leave"
+        and event["player_id"] == room["player_id"]
+        for event in guest_events
+    )
 
     assert owner.post("/auth/logout", headers={"Origin": ORIGIN}).status_code == 200
     assert owner.get("/auth/me").status_code == 401
