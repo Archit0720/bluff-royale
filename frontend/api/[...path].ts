@@ -66,32 +66,34 @@ export default async function handler(
   try {
     const chunks: Uint8Array[] = [];
     let size = 0;
-    const parsedBody = request.body;
-    const serializedBody =
-      parsedBody === undefined
-        ? undefined
-        : typeof parsedBody === 'string'
-          ? parsedBody
-          : JSON.stringify(parsedBody);
-    if (serializedBody !== undefined) {
-      chunks.push(new TextEncoder().encode(serializedBody));
-      size = chunks[0].byteLength;
-    } else {
-      for await (const chunk of request) {
-        const bytes = typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk;
-        size += bytes.byteLength;
-        if (size > 100_000) {
-          response.statusCode = 413;
-          response.end('Request body is too large.');
-          return;
+    if (method === 'POST') {
+      const parsedBody = request.body;
+      const serializedBody =
+        parsedBody === undefined
+          ? undefined
+          : typeof parsedBody === 'string'
+            ? parsedBody
+            : JSON.stringify(parsedBody);
+      if (serializedBody !== undefined) {
+        chunks.push(new TextEncoder().encode(serializedBody));
+        size = chunks[0].byteLength;
+      } else {
+        for await (const chunk of request) {
+          const bytes = typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk;
+          size += bytes.byteLength;
+          if (size > 100_000) {
+            response.statusCode = 413;
+            response.end('Request body is too large.');
+            return;
+          }
+          chunks.push(bytes);
         }
-        chunks.push(bytes);
       }
-    }
-    if (size > 100_000) {
-      response.statusCode = 413;
-      response.end('Request body is too large.');
-      return;
+      if (size > 100_000) {
+        response.statusCode = 413;
+        response.end('Request body is too large.');
+        return;
+      }
     }
     const body = new Uint8Array(size);
     let offset = 0;
