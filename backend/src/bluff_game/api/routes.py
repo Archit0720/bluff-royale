@@ -159,8 +159,12 @@ async def dialogue(
             raise RuntimeError("The game is paused.")
         event = {
             "player_id": player.id,
-            "kind": "dialogue",
-            "dialogue": body.dialogue,
+            "kind": "dialogue" if body.dialogue is not None else "custom",
+            **(
+                {"dialogue": body.dialogue}
+                if body.dialogue is not None
+                else {"custom_text": body.custom_text}
+            ),
             "created_at": time.time(),
         }
         await service.store.publish_emote(game_room.id, event)

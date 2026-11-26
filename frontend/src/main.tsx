@@ -19,8 +19,22 @@ type Screen =
   | 'game';
 type Session = { gameId: string; playerId: string; name: string };
 type Profile = { display_name: string; picture: string | null };
-type EmoteName = 'laugh' | 'wow' | 'clap' | 'heart' | 'bluff';
-type DialogueName = 'bold_move' | 'prove_it' | 'eyes_on_you' | 'nice_try' | 'royal_bluff' | 'well_played';
+type EmoteName = 'laugh' | 'wow' | 'clap' | 'heart' | 'bluff' | 'cool' | 'fire' | 'crown' | 'eyes' | 'sweat' | 'shrug';
+type DialogueName =
+  | 'bold_move'
+  | 'prove_it'
+  | 'eyes_on_you'
+  | 'nice_try'
+  | 'royal_bluff'
+  | 'well_played'
+  | 'calculated'
+  | 'plot_twist'
+  | 'no_way'
+  | 'ice_cold'
+  | 'crown_jewel'
+  | 'read_the_table'
+  | 'almost_had_me'
+  | 'respect_the_play';
 type AuthState =
   | { status: 'checking' }
   | { status: 'signed_out' }
@@ -37,6 +51,14 @@ const dialogueOptions: { name: DialogueName; label: string }[] = [
   { name: 'nice_try', label: 'Nice try.' },
   { name: 'royal_bluff', label: 'Royal bluff.' },
   { name: 'well_played', label: 'Well played.' },
+  { name: 'calculated', label: 'Calculated.' },
+  { name: 'plot_twist', label: 'Plot twist!' },
+  { name: 'no_way', label: 'No way!' },
+  { name: 'ice_cold', label: 'Ice cold.' },
+  { name: 'crown_jewel', label: 'Crown jewel.' },
+  { name: 'read_the_table', label: 'Read the table.' },
+  { name: 'almost_had_me', label: 'Almost had me.' },
+  { name: 'respect_the_play', label: 'Respect the play.' },
 ];
 
 function describeEvent(event: any, players: any[]) {
@@ -92,6 +114,7 @@ function App() {
   const [confirmQuit, setConfirmQuit] = useState(false);
   const [sendingEmote, setSendingEmote] = useState(false);
   const [sendingDialogue, setSendingDialogue] = useState(false);
+  const [customDialogue, setCustomDialogue] = useState('');
   const [announcement, setAnnouncement] = useState<any>(null);
   const [sound, setSound] = useState(localStorage.getItem('br_sound') !== 'off');
   const [motion, setMotion] = useState(localStorage.getItem('br_motion') !== 'off');
@@ -300,12 +323,13 @@ function App() {
     }
   }
 
-  async function sendDialogue(dialogue: DialogueName) {
+  async function sendDialogue(message: { dialogue: DialogueName } | { custom_text: string }) {
     if (!session || sendingDialogue || Date.now() - lastReactionAt.current < 650) return;
     lastReactionAt.current = Date.now();
     setSendingDialogue(true);
     try {
-      await api.dialogue(session.gameId, dialogue);
+      await api.dialogue(session.gameId, message);
+      if ('custom_text' in message) setCustomDialogue('');
     } catch (cause) {
       await handleRequestError(cause);
     } finally {
@@ -581,6 +605,12 @@ function App() {
       { name: 'clap', symbol: '👏', label: 'Clap' },
       { name: 'heart', symbol: '❤️', label: 'Heart' },
       { name: 'bluff', symbol: '🤥', label: 'Bluff' },
+      { name: 'cool', symbol: '😎', label: 'Cool' },
+      { name: 'fire', symbol: '🔥', label: 'Fire' },
+      { name: 'crown', symbol: '👑', label: 'Crown' },
+      { name: 'eyes', symbol: '👀', label: 'Eyes' },
+      { name: 'sweat', symbol: '😅', label: 'Nervous' },
+      { name: 'shrug', symbol: '🤷', label: 'Shrug' },
     ];
     const recentEmotes = (room?.recent_emotes || [])
       .filter((item: any) => Date.now() / 1000 - item.created_at < 5)
@@ -610,6 +640,8 @@ function App() {
               <span key={`${item.player_id}-${item.created_at}`} className={item.kind === 'dialogue' ? 'dialogue-reaction' : item.kind === 'system' ? 'system-reaction' : 'emote-reaction'}>
                 {item.kind === 'dialogue'
                   ? dialogueOptions.find((option) => option.name === item.dialogue)?.label
+                  : item.kind === 'custom'
+                    ? item.custom_text
                   : item.kind === 'system' && item.system_event === 'leave'
                     ? 'LEFT THE TABLE'
                     : emoteOptions.find((option) => option.name === item.emote)?.symbol}
@@ -651,11 +683,29 @@ function App() {
               </button>
             ))}
           </div>
-          <div className="dialogue-bar" aria-label="Send a preset dialogue">
+          <div className="dialogue-bar" aria-label="Send table talk">
             <span>TABLE TALK</span>
-            {dialogueOptions.map((option) => (
-              <button key={option.name} type="button" disabled={sendingDialogue || game.paused} onClick={() => void sendDialogue(option.name)}>{option.label}</button>
-            ))}
+            <div className="dialogue-presets">
+              {dialogueOptions.map((option) => (
+                <button key={option.name} type="button" disabled={sendingDialogue || game.paused} onClick={() => void sendDialogue({ dialogue: option.name })}>{option.label}</button>
+              ))}
+            </div>
+            <form className="custom-dialogue" onSubmit={(event) => {
+              event.preventDefault();
+              const text = customDialogue.trim();
+              if (text) void sendDialogue({ custom_text: text });
+            }}>
+              <input
+                aria-label="Write custom table talk"
+                placeholder="Write your own line…"
+                maxLength={120}
+                value={customDialogue}
+                disabled={sendingDialogue || game.paused}
+                onChange={(event) => setCustomDialogue(event.target.value)}
+              />
+              <button type="submit" disabled={sendingDialogue || game.paused || !customDialogue.trim()}>SEND</button>
+              <small>{customDialogue.length}/120</small>
+            </form>
           </div>
           {error && <div className="err" role="alert">{error}</div>}
         </section>

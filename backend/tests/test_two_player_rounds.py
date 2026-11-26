@@ -171,6 +171,24 @@ def test_provisional_final_play_is_not_returned_to_finisher():
     assert game.available_actions("first") == []
 
 
+def test_last_remaining_player_finishes_without_invalidating_the_game():
+    game = make_game(
+        second_hand=[
+            Card(Rank.TWO, Suit.CLUBS),
+            Card(Rank.THREE, Suit.CLUBS),
+        ],
+    )
+    game.players[0].hand = []
+    game.finishing_order = ["first"]
+    game.current_player_index = 1
+
+    game.play("second", [0], Rank.ACE)
+
+    assert game.status is GameStatus.FINISHED
+    assert game.finishing_order == ["first", "second"]
+    assert game.last_place_id == "second"
+
+
 def test_timeout_pauses_after_control_returns_to_contributor():
     import asyncio
 

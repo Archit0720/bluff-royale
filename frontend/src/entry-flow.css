@@ -497,6 +497,39 @@ input:focus-visible,
     opacity: .48;
   }
 
+  .dialogue-presets {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    width: 100%;
+  }
+
+  .custom-dialogue {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: min(100%, 520px);
+  }
+
+  .custom-dialogue input {
+    flex: 1;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid #54654f;
+    border-radius: 20px;
+    background: #0b1710;
+    color: #f3ead4;
+  }
+
+  .custom-dialogue small {
+    min-width: 42px;
+    color: #829188;
+    font-size: 10px;
+    text-align: right;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .emote-feed span,
     .table-announcement,

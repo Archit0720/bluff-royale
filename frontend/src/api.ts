@@ -47,12 +47,33 @@ export const api = {
   challenge: (gameId: string, _playerId?: string) => post(`/games/${gameId}/challenge`, {}),
   pause: (gameId: string, _playerId?: string) => post(`/games/${gameId}/pause`, {}),
   resume: (gameId: string, _playerId?: string) => post(`/games/${gameId}/resume`, {}),
-  emote: (gameId: string, emote: 'laugh' | 'wow' | 'clap' | 'heart' | 'bluff') =>
+  emote: (
+    gameId: string,
+    emote: 'laugh' | 'wow' | 'clap' | 'heart' | 'bluff' | 'cool' | 'fire' | 'crown' | 'eyes' | 'sweat' | 'shrug',
+  ) =>
     post(`/games/${gameId}/emote`, { emote }),
   dialogue: (
     gameId: string,
-    dialogue: 'bold_move' | 'prove_it' | 'eyes_on_you' | 'nice_try' | 'royal_bluff' | 'well_played',
-  ) => post(`/games/${gameId}/dialogue`, { dialogue }),
+    message:
+      | {
+          dialogue:
+            | 'bold_move'
+            | 'prove_it'
+            | 'eyes_on_you'
+            | 'nice_try'
+            | 'royal_bluff'
+            | 'well_played'
+            | 'calculated'
+            | 'plot_twist'
+            | 'no_way'
+            | 'ice_cold'
+            | 'crown_jewel'
+            | 'read_the_table'
+            | 'almost_had_me'
+            | 'respect_the_play';
+        }
+      | { custom_text: string },
+  ) => post(`/games/${gameId}/dialogue`, message),
   leave: (gameId: string) => post(`/games/${gameId}/leave`, {}),
   history: (_playerName?: string) => q('/auth/me/matches'),
 };

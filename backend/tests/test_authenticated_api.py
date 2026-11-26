@@ -202,12 +202,39 @@ def test_two_accounts_cannot_select_another_seat_or_read_its_hand(
     assert owner.get(f"/games/{room['game_id']}").json()["recent_emotes"][0][
         "dialogue"
     ] == "prove_it"
+    custom_text = owner.post(
+        f"/games/{room['game_id']}/dialogue",
+        json={"custom_text": "The crown is still up for grabs."},
+        headers={"Origin": ORIGIN},
+    )
+    assert custom_text.status_code == 200
+    assert owner.get(f"/games/{room['game_id']}").json()["recent_emotes"][0][
+        "custom_text"
+    ] == "The crown is still up for grabs."
+    blank_custom_text = owner.post(
+        f"/games/{room['game_id']}/dialogue",
+        json={"custom_text": "   "},
+        headers={"Origin": ORIGIN},
+    )
+    assert blank_custom_text.status_code == 422
+    oversized_custom_text = owner.post(
+        f"/games/{room['game_id']}/dialogue",
+        json={"custom_text": "x" * 121},
+        headers={"Origin": ORIGIN},
+    )
+    assert oversized_custom_text.status_code == 422
     invalid_dialogue = owner.post(
         f"/games/{room['game_id']}/dialogue",
         json={"dialogue": "a custom message"},
         headers={"Origin": ORIGIN},
     )
     assert invalid_dialogue.status_code == 422
+    invalid_both = owner.post(
+        f"/games/{room['game_id']}/dialogue",
+        json={"dialogue": "prove_it", "custom_text": "also this"},
+        headers={"Origin": ORIGIN},
+    )
+    assert invalid_both.status_code == 422
 
     owner_state = owner.get(f"/games/{room['game_id']}/state").json()
     guest_state = guest.get(f"/games/{room['game_id']}/state").json()

@@ -39,7 +39,12 @@ class BluffGame:
   elif rank is not None and rank!=self.current_rank:raise ValueError('The claimed rank cannot change during an active round.')
   p=self.current_player;cards=p.play_cards(indices);play=Play(pid,tuple(cards),self.current_rank);self._confirm_except(pid);self.pile.extend(cards);self.last_play=play;self.skipped_since_last_play.clear()
   if p.card_count==0 and pid not in self.provisional_finishers:self.provisional_finishers.append(pid)
-  self._record({'type':'play','player_id':pid,'count':len(cards),'rank':self.current_rank.value});self._advance();return play
+  self._record({'type':'play','player_id':pid,'count':len(cards),'rank':self.current_rank.value})
+  if p.card_count==0:
+   if any(self._eligible(player.id) for player in self.players):self._advance()
+   else:self._complete()
+  elif not self._complete():self._advance()
+  return play
  def skip(self,pid):
   self._turn(pid)
   if self.last_play is None:raise RuntimeError('The round starter cannot skip before any cards are played.')
@@ -99,15 +104,17 @@ class BluffGame:
   out=[]
   for pid in list(self.provisional_finishers):
    if pid!=target:self.provisional_finishers.remove(pid);self.finishing_order.append(pid);out.append(pid)
-  self._complete();return out
+  return out
  def _confirm_all(self):
   out=[]
   for pid in list(self.provisional_finishers):self.provisional_finishers.remove(pid);self.finishing_order.append(pid);out.append(pid)
   return out
  def _complete(self):
   remaining=[p.id for p in self.players if p.id not in self.finishing_order and p.id not in self.provisional_finishers]
-  if len(remaining)==1 and len(self.finishing_order)+len(self.provisional_finishers)==len(self.players)-1:
-   self._confirm_all();remaining=[p.id for p in self.players if p.id not in self.finishing_order]
+  placed=len(self.finishing_order)+len(self.provisional_finishers)
+  if (len(remaining)==1 and placed==len(self.players)-1) or (not remaining and placed==len(self.players)):
+   self._confirm_all()
+   remaining=[p.id for p in self.players if p.id not in self.finishing_order]
    if len(remaining)==1:self.finishing_order.append(remaining[0])
    self.status=GameStatus.FINISHED;self.current_rank=None;self.last_play=None;self.skipped_since_last_play.clear();self._record({'type':'finished'});return True
   return False
