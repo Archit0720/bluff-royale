@@ -2,6 +2,18 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/api/feedback",
+      "destination": "https://bluff-royale-kuuq.onrender.com/feedback"
+    },
+    {
+      "source": "/api/analytics/visit",
+      "destination": "https://bluff-royale-kuuq.onrender.com/analytics/visit"
+    },
+    {
+      "source": "/api/analytics/summary",
+      "destination": "https://bluff-royale-kuuq.onrender.com/analytics/summary"
+    },
+    {
       "source": "/api/auth/nonce",
       "destination": "https://bluff-royale-kuuq.onrender.com/auth/nonce"
     },

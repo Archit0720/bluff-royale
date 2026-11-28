@@ -85,4 +85,7 @@ export const api = {
   ) => post(`/games/${gameId}/dialogue`, message),
   leave: (gameId: string) => post(`/games/${gameId}/leave`, {}),
   history: (_playerName?: string) => q('/auth/me/matches'),
+  recordVisit: () => post('/analytics/visit', {}),
+  analytics: () => q('/analytics/summary'),
+  feedback: (message: string) => post('/feedback', { message }),
 };

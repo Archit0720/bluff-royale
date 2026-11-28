@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ApiError, api } from './api';
 import GoogleSignIn from './GoogleSignIn';
@@ -153,10 +153,42 @@ function App() {
   const [sound, setSound] = useState(localStorage.getItem('br_sound') !== 'off');
   const [motion, setMotion] = useState(localStorage.getItem('br_motion') !== 'off');
   const [history, setHistory] = useState<any[]>([]);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackStatus, setFeedbackStatus] = useState('');
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [analyticsSummary, setAnalyticsSummary] = useState<any>(null);
   const signingIn = useRef(false);
   const pendingAction = useRef<(() => Promise<any>) | null>(null);
   const lastReactionAt = useRef(0);
   const latestGameEvent = game?.recent_events?.[game.recent_events.length - 1];
+
+  useEffect(() => {
+    api.recordVisit().catch((cause) => {
+      console.warn('Could not record an anonymous page visit.', cause);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (auth.status !== 'signed_in') {
+      setAnalyticsSummary(null);
+      return;
+    }
+
+    let active = true;
+    api.analytics().then((summary) => {
+      if (active) setAnalyticsSummary(summary);
+    }).catch((cause) => {
+      if (!active) return;
+      if (!(cause instanceof ApiError && cause.status === 403)) {
+        console.error('Could not load site analytics.', cause);
+      }
+      setAnalyticsSummary(null);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [auth.status]);
 
   useEffect(() => {
     if (!latestGameEvent?.at) return;
@@ -366,6 +398,25 @@ function App() {
     }
   }
 
+  async function sendFeedback(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const message = feedbackText.trim();
+    if (!message || feedbackSending) return;
+    setFeedbackSending(true);
+    setFeedbackStatus('');
+    try {
+      await api.feedback(message);
+      setFeedbackText('');
+      setFeedbackStatus('Thanks — your feedback was sent.');
+    } catch (cause) {
+      setFeedbackStatus(cause instanceof Error
+        ? cause.message
+        : 'Could not send feedback. Please try again later.');
+    } finally {
+      setFeedbackSending(false);
+    }
+  }
+
   async function sendEmote(emote: EmoteName) {
     if (!session || sendingEmote || Date.now() - lastReactionAt.current < 650) return;
     lastReactionAt.current = Date.now();
@@ -508,6 +559,35 @@ function App() {
           <button onClick={() => requestEntry('history')}>◷ <span>PREVIOUS GAMES</span></button>
           <button onClick={() => setScreen('options')}>⚙ <span>OPTIONS</span></button>
         </nav>
+        <section className="home-extras">
+          <section className="feedback-panel" aria-labelledby="feedback-title">
+            <h2 id="feedback-title">FEEDBACK</h2>
+            <p>Tell us what’s working or what we can improve.</p>
+            <form onSubmit={(event) => void sendFeedback(event)}>
+              <textarea
+                aria-label="Your feedback"
+                minLength={10}
+                maxLength={3000}
+                placeholder="Share your feedback (10–3000 characters)"
+                value={feedbackText}
+                onChange={(event) => setFeedbackText(event.target.value)}
+                required
+              />
+              <button type="submit" disabled={feedbackSending || feedbackText.trim().length < 10}>
+                {feedbackSending ? 'SENDING…' : 'SEND FEEDBACK'}
+              </button>
+            </form>
+            {feedbackStatus && <p className="feedback-status" role="status">{feedbackStatus}</p>}
+          </section>
+          {analyticsSummary && (
+            <section className="analytics-panel" aria-label="Private site analytics">
+              <h2>SITE ACTIVITY</h2>
+              <p>{analyticsSummary.total_visits} page visits · {analyticsSummary.total_sign_ins} sign-ins · {analyticsSummary.registered_accounts} accounts</p>
+              <small>Aggregate totals only. Visitor emails and IP addresses are not included.</small>
+            </section>
+          )}
+          <small className="privacy-note">We count anonymous page visits. Sign-in emails are not used for traffic analytics.</small>
+        </section>
         <footer>BLUFF ROYALE · v0.7 · © 2026</footer>
       </main>
     );

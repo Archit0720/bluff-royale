@@ -13,6 +13,8 @@ FastAPI game API with in-memory room state, SQL match history, Google Identity S
 
 For local cookie authentication, open the frontend and API using the same hostname (`localhost` or `127.0.0.1`). In production, set `APP_ENV=production`, `GOOGLE_CLIENT_ID`, the exact Vercel origin in `FRONTEND_URL`, and `DATABASE_URL`; serve the API over HTTPS behind a proxy configured to pass the HTTPS scheme. The frontend's same-origin Vercel `/api` proxy forwards requests to Render, so the app cookie is Secure, HttpOnly, and SameSite=Lax rather than relying on third-party cookies. `DATABASE_URL` can point to Neon/PostgreSQL. Room state exists only in the single backend instance's memory; active rooms are lost whenever that instance restarts or redeploys.
 
+The home-page feedback form sends messages to `FEEDBACK_TO_EMAIL` using SMTP. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, and `SMTP_PASSWORD` in Render's environment to enable delivery. For Gmail, use an App Password and store it only in Render; do not commit it or paste it into chat. Until SMTP is configured, the form reports that delivery is unavailable. The owner-only analytics summary is restricted to the verified account in `ANALYTICS_ADMIN_EMAIL` and returns aggregate page visits and account totals only; it does not expose visitor emails or log IP addresses.
+
 ## Authentication and private data
 
 The browser obtains a short-lived sign-in nonce, initializes the Google Identity Services button with it, and posts the returned credential to FastAPI. The API verifies the Google ID token audience/signature and nonce with `google-auth`, then consumes the nonce once and issues a 30-day revocable HttpOnly session cookie. Google email and subject remain server-side.

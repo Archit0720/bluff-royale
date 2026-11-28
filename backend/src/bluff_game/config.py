@@ -20,6 +20,18 @@ ALLOWED_ORIGINS = list(
     )
 )
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID") or None
+ANALYTICS_ADMIN_EMAIL = os.getenv(
+    "ANALYTICS_ADMIN_EMAIL",
+    "architdogra07@gmail.com",
+).strip().casefold()
+SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "").strip()
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+FEEDBACK_TO_EMAIL = os.getenv(
+    "FEEDBACK_TO_EMAIL",
+    "architdogra95@gmail.com",
+).strip()
 APP_ENV = os.getenv("APP_ENV", "development").lower()
 SESSION_COOKIE_NAME = "bluff_session"
 SESSION_COOKIE_SAMESITE = "lax"

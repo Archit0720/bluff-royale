@@ -502,6 +502,12 @@ TURN_SECONDS=40
 ROOM_TTL_SECONDS=86400
 
 FRONTEND_URL=http://localhost:5173
+ANALYTICS_ADMIN_EMAIL=architdogra07@gmail.com
+FEEDBACK_TO_EMAIL=architdogra95@gmail.com
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USERNAME=
+SMTP_PASSWORD=
 ```
 
 Start FastAPI:
@@ -621,9 +627,16 @@ Production credentials are supplied through environment variables:
 DATABASE_URL
 FRONTEND_URL
 VITE_API_URL
+ANALYTICS_ADMIN_EMAIL
+FEEDBACK_TO_EMAIL
+SMTP_HOST
+SMTP_PORT
+SMTP_USERNAME
+SMTP_PASSWORD
 ```
 
 Secrets are not intended to be committed to source control.
+Configure SMTP values only in Render's environment. Gmail delivery requires an App Password; until SMTP is configured, feedback submissions return a clear unavailable message. The analytics dashboard is restricted to `ANALYTICS_ADMIN_EMAIL` and stores aggregate page-view counts only, without visitor emails or IP addresses.
 
 ---
 

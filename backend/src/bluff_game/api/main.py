@@ -14,6 +14,8 @@ from ..storage.room_store import MemoryRoomStore
 from .manager import Manager
 from .routes import router
 from .auth_routes import router as auth_router
+from .analytics_routes import router as analytics_router
+from .feedback_routes import router as feedback_router
 
 
 @asynccontextmanager
@@ -45,6 +47,8 @@ app.add_middleware(
 
 app.include_router(router)
 app.include_router(auth_router)
+app.include_router(analytics_router)
+app.include_router(feedback_router)
 
 
 @app.get("/health")

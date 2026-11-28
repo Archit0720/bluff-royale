@@ -1,16 +1,20 @@
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import (
     DateTime,
     ForeignKey,
+    Integer,
     String,
     Text,
     create_engine,
+    func,
     inspect,
     select,
     text,
 )
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 
@@ -34,6 +38,31 @@ class MatchParticipation(Base):
 
     match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+
+
+class DailyMetric(Base):
+    __tablename__ = "daily_metrics"
+
+    day: Mapped[str] = mapped_column(String(10), primary_key=True)
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+def record_metric_with_session(session, name):
+    day = date.today().isoformat()
+    values = {"day": day, "name": name, "count": 1}
+    dialect = session.get_bind().dialect.name
+    if dialect == "sqlite":
+        statement = sqlite_insert(DailyMetric).values(**values)
+    elif dialect == "postgresql":
+        statement = postgresql_insert(DailyMetric).values(**values)
+    else:
+        raise RuntimeError("Site analytics require SQLite or PostgreSQL.")
+    statement = statement.on_conflict_do_update(
+        index_elements=[DailyMetric.day, DailyMetric.name],
+        set_={"count": DailyMetric.count + 1},
+    )
+    session.execute(statement)
 
 
 class History:
@@ -74,6 +103,36 @@ class History:
                         text("ALTER TABLE users ADD COLUMN picture VARCHAR(2048)")
                     )
         self.Session = sessionmaker(self.engine)
+
+    def record_metric(self, name):
+        with self.Session.begin() as session:
+            record_metric_with_session(session, name)
+
+    def analytics_summary(self):
+        from .auth import User
+
+        since = (date.today() - timedelta(days=29)).isoformat()
+        with self.Session() as session:
+            visits = session.scalar(
+                select(func.coalesce(func.sum(DailyMetric.count), 0)).where(
+                    DailyMetric.name == "visit",
+                    DailyMetric.day >= since,
+                )
+            )
+            sign_ins = session.scalar(
+                select(func.coalesce(func.sum(DailyMetric.count), 0)).where(
+                    DailyMetric.name == "sign_in",
+                    DailyMetric.day >= since,
+                )
+            )
+            registered_accounts = session.scalar(
+                select(func.count(User.id))
+            )
+        return {
+            "total_visits": visits,
+            "total_sign_ins": sign_ins,
+            "registered_accounts": registered_accounts,
+        }
 
     def save(self, room):
         if room.history_saved:

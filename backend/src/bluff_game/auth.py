@@ -11,7 +11,7 @@ from sqlalchemy import Float, ForeignKey, String, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column, sessionmaker
 
-from .history import Base
+from .history import Base, record_metric_with_session
 
 NONCE_TTL_SECONDS = 5 * 60
 SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
@@ -161,6 +161,7 @@ class AuthService:
                     expires_at=now + SESSION_TTL_SECONDS,
                 )
             )
+            record_metric_with_session(session, "sign_in")
             user_id = user.id
 
         return token, user_id
@@ -174,6 +175,12 @@ class AuthService:
                 "display_name": user.display_name,
                 "picture": user.picture,
             }
+
+    def email_for_user(self, user_id: str):
+        with self.sessions() as session:
+            return session.scalar(
+                select(User.email).where(User.id == user_id)
+            )
 
     def identity_for_token(self, token: str | None):
         if not token:
