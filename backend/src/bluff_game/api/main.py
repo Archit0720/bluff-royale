@@ -7,12 +7,10 @@ from ..config import (
     ALLOWED_ORIGINS,
     DATABASE_URL,
     GOOGLE_CLIENT_ID,
-    REDIS_URL,
-    USE_MEMORY_STORE,
 )
 from ..auth import AuthService
 from ..history import History
-from ..storage.room_store import MemoryRoomStore, RedisRoomStore
+from ..storage.room_store import MemoryRoomStore
 from .manager import Manager
 from .routes import router
 from .auth_routes import router as auth_router
@@ -20,15 +18,7 @@ from .auth_routes import router as auth_router
 
 @asynccontextmanager
 async def lifespan(app):
-    store = (
-        MemoryRoomStore()
-        if USE_MEMORY_STORE
-        else RedisRoomStore(REDIS_URL)
-    )
-
-    if hasattr(store, "ping"):
-        await store.ping()
-
+    store = MemoryRoomStore()
     history = History(DATABASE_URL)
     app.state.history = history
     app.state.auth = AuthService(history.Session, GOOGLE_CLIENT_ID)
@@ -36,13 +26,10 @@ async def lifespan(app):
 
     yield
 
-    if hasattr(store, "close"):
-        await store.close()
-
 
 app = FastAPI(
     title="Bluff Royale API",
-    version="0.6.0",
+    version="0.7.0",
     lifespan=lifespan,
 )
 
@@ -64,5 +51,6 @@ app.include_router(auth_router)
 def health():
     return {
         "status": "ok",
-        "version": "0.6.0",
+        "version": "0.7.0",
+        "room_storage": "memory",
     }

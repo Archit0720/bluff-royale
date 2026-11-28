@@ -1,10 +1,9 @@
 Metadata-Version: 2.4
 Name: bluff-royale-backend
-Version: 0.6.0
+Version: 0.7.0
 Requires-Python: >=3.11
 Requires-Dist: fastapi<1,>=0.115
 Requires-Dist: uvicorn[standard]<1,>=0.32
-Requires-Dist: redis<9,>=5
 Requires-Dist: sqlalchemy<3,>=2
 Requires-Dist: psycopg[binary]<4,>=3
 Requires-Dist: google-auth[requests]<3,>=2.30

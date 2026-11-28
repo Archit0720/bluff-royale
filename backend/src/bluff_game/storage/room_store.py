@@ -1,11 +1,7 @@
 import asyncio
-import json
-import pickle
 import time
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-
-from redis.asyncio import Redis
 
 EMOTE_TTL_SECONDS = 30
 EMOTE_LIMIT = 18
@@ -117,98 +113,4 @@ class MemoryRoomStore(RoomStore):
     async def room_lock(self, key):
         lock = self.locks.setdefault(key, asyncio.Lock())
         async with lock:
-            yield
-
-
-class RedisRoomStore(RoomStore):
-    def __init__(self, url):
-        self.client = Redis.from_url(url)
-
-    async def ping(self):
-        return await self.client.ping()
-
-    async def close(self):
-        await self.client.aclose()
-
-    async def get(self, key):
-        raw = await self.client.get(f"bluff:room:{key}")
-        return pickle.loads(raw) if raw else None
-
-    async def set(self, key, value, ttl):
-        await self.client.set(f"bluff:room:{key}", pickle.dumps(value), ex=ttl)
-
-    async def delete(self, key):
-        await self.client.delete(
-            f"bluff:room:{key}",
-            f"bluff:room-emotes:{key}",
-            f"bluff:room-presence:{key}",
-        )
-
-    async def publish_emote(self, key, event):
-        redis_key = f"bluff:room-emotes:{key}"
-        async with self.client.pipeline(transaction=True) as pipeline:
-            await (
-                pipeline.lpush(redis_key, json.dumps(event))
-                .ltrim(redis_key, 0, EMOTE_LIMIT - 1)
-                .expire(redis_key, EMOTE_TTL_SECONDS)
-                .execute()
-            )
-
-    async def recent_emotes(self, key):
-        entries = await self.client.lrange(
-            f"bluff:room-emotes:{key}",
-            0,
-            EMOTE_LIMIT - 1,
-        )
-        return [json.loads(entry) for entry in entries]
-
-    async def touch_presence(self, key, player_id):
-        redis_key = f"bluff:room-presence:{key}"
-        current = await self.client.hget(redis_key, player_id)
-        if current:
-            event = json.loads(current)
-            if event["status"] == "left":
-                return
-        await self.client.hset(
-            redis_key,
-            player_id,
-            json.dumps({"status": "online", "at": time.time()}),
-        )
-        await self.client.expire(redis_key, 86400)
-
-    async def mark_left(self, key, player_id):
-        redis_key = f"bluff:room-presence:{key}"
-        await self.client.hset(
-            redis_key,
-            player_id,
-            json.dumps({"status": "left", "at": time.time()}),
-        )
-        await self.client.expire(redis_key, 86400)
-
-    async def room_presence(self, key):
-        now = time.time()
-        entries = await self.client.hgetall(f"bluff:room-presence:{key}")
-        presence = {}
-        for raw_player_id, raw_event in entries.items():
-            player_id = (
-                raw_player_id.decode()
-                if isinstance(raw_player_id, bytes)
-                else raw_player_id
-            )
-            event = json.loads(raw_event)
-            presence[player_id] = (
-                "left"
-                if event["status"] == "left"
-                or now - event["at"] > PRESENCE_TTL_SECONDS
-                else "online"
-            )
-        return presence
-
-    @asynccontextmanager
-    async def room_lock(self, key):
-        async with self.client.lock(
-            f"bluff:room-lock:{key}",
-            timeout=30,
-            blocking_timeout=30,
-        ):
             yield

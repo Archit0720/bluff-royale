@@ -342,8 +342,8 @@ The backend does.
        │           │
        ▼           ▼
 ┌──────────┐  ┌──────────────┐
-│ Memory / │  │  PostgreSQL  │
-│  Redis   │  │              │
+│ Memory   │  │  PostgreSQL  │
+│          │  │              │
 │ Live     │  │ Match        │
 │ Games    │  │ History      │
 └──────────┘  └──────────────┘
@@ -391,8 +391,7 @@ The engine independently determines the result.
 
 | Technology | Purpose |
 |---|---|
-| In-memory store | Default active multiplayer game state (single backend instance) |
-| Redis / Upstash | Optional shared active game state |
+| In-memory store | Active multiplayer game state (single backend instance) |
 | PostgreSQL | Permanent match history |
 | Neon | Production PostgreSQL hosting |
 | SQLAlchemy | Database abstraction / ORM |
@@ -404,8 +403,6 @@ The engine independently determines the result.
 |---|---|
 | Git | Version control |
 | GitHub | Source hosting |
-| Docker | Optional local Redis infrastructure |
-| Docker Compose | Optional local service orchestration |
 | pytest | Backend testing |
 
 ---
@@ -468,7 +465,7 @@ Install:
 
 ---
 
-In-memory room storage is enabled by default. To use Redis instead, start a Redis service and set `USE_MEMORY_STORE=false` and `REDIS_URL`.
+Room state is stored in backend memory. No Redis server, Upstash account, Docker, or Redis-related environment variable is needed.
 
 ---
 
@@ -499,12 +496,10 @@ python -m pip install -e ".[dev]"
 Configure the development environment:
 
 ```text
-REDIS_URL=redis://localhost:6379/0
 DATABASE_URL=sqlite:///./bluff_history.db
 
 TURN_SECONDS=40
 ROOM_TTL_SECONDS=86400
-USE_MEMORY_STORE=true
 
 FRONTEND_URL=http://localhost:5173
 ```
@@ -577,7 +572,7 @@ Bluff Royale is designed to run entirely on free-tier-friendly infrastructure.
 |---|---|
 | Frontend | Vercel |
 | Backend | Render |
-| Live Game State | Render instance memory by default; optional Upstash Redis |
+| Live Game State | Render instance memory |
 | Match History | Neon PostgreSQL |
 | Source | GitHub |
 
@@ -623,7 +618,6 @@ The backend determines whether that challenge succeeds.
 Production credentials are supplied through environment variables:
 
 ```text
-REDIS_URL
 DATABASE_URL
 FRONTEND_URL
 VITE_API_URL
@@ -655,7 +649,7 @@ Pause state
 Finishing order
 ```
 
-This requires a single backend instance; rooms are lost when that process restarts. Redis is available as an optional shared store when persistence across restarts or multiple instances is needed.
+This requires a single backend instance; rooms are lost when that process restarts. The backend no longer connects to Redis, so Upstash request quotas do not apply.
 
 ## PostgreSQL
 
@@ -673,7 +667,7 @@ Room identifier
 In other words:
 
 ```text
-Memory (or Redis) = what is happening now.
+Memory = what is happening now.
 
 PostgreSQL = what happened before.
 ```
@@ -690,7 +684,7 @@ Player A
 FastAPI
    │
    ├── Generate room code
-   └── Store room in memory (or Redis when configured)
+   └── Store room in memory
 
 
 Player B
@@ -720,7 +714,7 @@ A♠ owner opens
 Player makes claim
    │
    ▼
-Redis updated
+Memory updated
    │
    ▼
 Other clients receive new state
@@ -759,7 +753,7 @@ Backend tests cover core behaviour including:
 - Finishing positions
 - Finished-player turn removal
 - Last-place resolution
-- Redis storage abstraction
+- In-memory room storage
 
 Run:
 
