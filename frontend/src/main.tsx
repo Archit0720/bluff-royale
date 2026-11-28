@@ -44,22 +44,35 @@ type AuthState =
 
 const R = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const sym: Record<string, string> = { H: '♥', D: '♦', C: '♣', S: '♠' };
+const emotePopupSymbols: Record<string, string> = {
+  laugh: '😂',
+  wow: '😮',
+  clap: '👏',
+  heart: '❤️',
+  bluff: '🤥',
+  cool: '😎',
+  fire: '🔥',
+  crown: '👑',
+  eyes: '👀',
+  sweat: '😅',
+  shrug: '🤷',
+};
 const ord = (n: number) => (n === 1 ? '1st' : n === 2 ? '2nd' : n === 3 ? '3rd' : `${n}th`);
 const dialogueOptions: { name: DialogueName; label: string }[] = [
-  { name: 'arre_bhai', label: 'Arre bhai, pakde gaye!' },
-  { name: 'kya_scene', label: 'Kya scene hai, boss?' },
-  { name: 'filmi_bluff', label: 'Full filmi bluff!' },
-  { name: 'chai_break', label: 'Chai break ke baad challenge?' },
-  { name: 'seedha_bol', label: 'Seedha bol, yaar!' },
-  { name: 'wah_ustad', label: 'Wah, kya chaal hai!' },
-  { name: 'dimaag_laga', label: 'Dimaag laga, dost!' },
-  { name: 'jugaad_pro', label: 'Jugaad level: pro.' },
-  { name: 'balle_balle', label: 'Balle balle, kya play!' },
-  { name: 'shabaash_sher', label: 'Shabaash, sher!' },
-  { name: 'rangey_haath', label: 'Oho, rangey haath!' },
-  { name: 'kya_baat', label: 'Kya baat, kya baat!' },
-  { name: 'boss_move', label: 'Boss move, ekdum!' },
-  { name: 'scene_set', label: 'Aaj toh scene set hai!' },
+  { name: 'arre_bhai', label: 'Itna confidence toh LIC agent mein bhi nahi, bhai.' },
+  { name: 'kya_scene', label: 'Cards tumhare hain ya fanfiction likh rahe ho?' },
+  { name: 'filmi_bluff', label: 'Bluff ka interval hua kya? Picture abhi baaki hai.' },
+  { name: 'chai_break', label: 'Chai meri taraf, pehle sach ka cup bhar.' },
+  { name: 'seedha_bol', label: 'Seedha bol, warna cards ki press conference karwaun?' },
+  { name: 'wah_ustad', label: 'Ustaad, cards khele ho ya press conference?' },
+  { name: 'dimaag_laga', label: 'Story mein holes zyada hain, dimaag laga raha hoon.' },
+  { name: 'jugaad_pro', label: 'Jugaad mast, par proof kidhar hai, bhai?' },
+  { name: 'balle_balle', label: 'Full paisa vasool nautanki, balle balle!' },
+  { name: 'shabaash_sher', label: 'Sher ho ya WhatsApp forward ka fact-check pending?' },
+  { name: 'rangey_haath', label: 'Rangey haath pakde gaye; excuse kaun sa hai?' },
+  { name: 'kya_baat', label: 'Jhooth bhi premium quality ka bolte ho, kya baat!' },
+  { name: 'boss_move', label: 'Boss move tha ya bas hawa tight kar rahe ho?' },
+  { name: 'scene_set', label: 'Scene set hai; interval ke baad pakde jaoge.' },
 ];
 const SESSION_RETRY_DELAYS = [0, 1500, 3000, 6000, 10000, 15000, 15000, 15000];
 
@@ -148,8 +161,9 @@ function App() {
   const [sendingEmote, setSendingEmote] = useState(false);
   const [sendingDialogue, setSendingDialogue] = useState(false);
   const [customDialogue, setCustomDialogue] = useState('');
-  const [socialPanel, setSocialPanel] = useState<'emotes' | 'messages' | null>(null);
+  const [socialPanel, setSocialPanel] = useState(false);
   const [announcement, setAnnouncement] = useState<any>(null);
+  const [reactionPopup, setReactionPopup] = useState<{ key: string; name: string; text: string } | null>(null);
   const [sound, setSound] = useState(localStorage.getItem('br_sound') !== 'off');
   const [motion, setMotion] = useState(localStorage.getItem('br_motion') !== 'off');
   const [history, setHistory] = useState<any[]>([]);
@@ -160,6 +174,8 @@ function App() {
   const signingIn = useRef(false);
   const pendingAction = useRef<(() => Promise<any>) | null>(null);
   const lastReactionAt = useRef(0);
+  const latestReactionAt = useRef<number | null>(null);
+  const reactionPopupTimer = useRef<number | null>(null);
   const latestGameEvent = game?.recent_events?.[game.recent_events.length - 1];
 
   useEffect(() => {
@@ -196,6 +212,30 @@ function App() {
     const timer = window.setTimeout(() => setAnnouncement(null), 5200);
     return () => window.clearTimeout(timer);
   }, [latestGameEvent?.at]);
+
+  useEffect(() => {
+    const newest = room?.recent_emotes?.[0];
+    if (!newest) return;
+    const key = `${newest.player_id}-${newest.created_at}`;
+    if (latestReactionAt.current === null) {
+      latestReactionAt.current = newest.created_at;
+      return;
+    }
+    if (newest.created_at <= latestReactionAt.current) return;
+
+    latestReactionAt.current = newest.created_at;
+    const name = room?.players.find((player: any) => player.id === newest.player_id)?.name || 'Player';
+    const text = newest.kind === 'dialogue'
+      ? dialogueOptions.find((option) => option.name === newest.dialogue)?.label
+      : newest.kind === 'custom'
+        ? newest.custom_text
+        : newest.kind === 'system' && newest.system_event === 'leave'
+          ? 'LEFT THE TABLE'
+          : emotePopupSymbols[newest.emote];
+    setReactionPopup({ key, name, text: text || 'Reacted' });
+    if (reactionPopupTimer.current !== null) window.clearTimeout(reactionPopupTimer.current);
+    reactionPopupTimer.current = window.setTimeout(() => setReactionPopup(null), 3200);
+  }, [room?.recent_emotes, game?.players]);
 
   useEffect(() => {
     let active = true;
@@ -803,6 +843,12 @@ function App() {
             <b>{tableAnnouncement.title}</b><span>{tableAnnouncement.detail}</span>
           </div>
         )}
+        {reactionPopup && (
+          <div key={reactionPopup.key} className="reaction-popup" role="status" aria-live="polite">
+            <span>{reactionPopup.text}</span>
+            <b>{reactionPopup.name}</b>
+          </div>
+        )}
         <section className="hud">
           <div className="message">
             {game.paused ? <><b>TABLE ON HOLD</b><span>{game.players.find((player: any) => player.id === game.paused_by)?.name || 'The table'} paused the game.</span></> : starter ? <><b>YOU OPEN THE ROUND</b><span>Choose the rank you want everyone to claim.</span></> : turn ? <><b>YOUR MOVE</b><span>Play, challenge the latest claim, or skip.</span></> : <><b>{game.players.find((player: any) => player.id === game.current_player_id)?.name}'S TURN</b><span>Watch the table. Remember every claim.</span></>}
@@ -820,6 +866,20 @@ function App() {
             {game.available_actions.includes('challenge') && <button className="bluff" disabled={game.paused} onClick={() => void run(() => api.challenge(session.gameId, session.playerId))}>CALL BLUFF</button>}
             {game.available_actions.includes('skip') && <button className="skip" disabled={game.paused} onClick={() => void run(() => api.skip(session.gameId, session.playerId))}>SKIP</button>}
             {game.available_actions.includes('close_round') && <button className="skip" disabled={game.paused} onClick={() => void run(() => api.closeRound(session.gameId, session.playerId))}>CLOSE ROUND</button>}
+          </div>
+          <div className="emote-bar" aria-label="Send an emote">
+            {emoteOptions.map((option) => (
+              <button
+                key={option.name}
+                type="button"
+                aria-label={`Send ${option.label} emote`}
+                title={option.label}
+                disabled={sendingEmote || game.status !== 'playing' || game.paused}
+                onClick={() => void sendEmote(option.name)}
+              >
+                {option.symbol}
+              </button>
+            ))}
           </div>
           <section className="table-chat" aria-label="Table chat and reactions">
             <div className="table-chat-heading"><b>TABLE CHAT</b><span>LAST FIVE</span></div>
@@ -843,32 +903,11 @@ function App() {
             <div className="social-shortcuts">
               <button
                 type="button"
-                aria-expanded={socialPanel === 'emotes'}
-                onClick={() => setSocialPanel((current) => current === 'emotes' ? null : 'emotes')}
-              >{socialPanel === 'emotes' ? '− HIDE EMOTES' : '☺ EMOTES'}</button>
-              <button
-                type="button"
-                aria-expanded={socialPanel === 'messages'}
-                onClick={() => setSocialPanel((current) => current === 'messages' ? null : 'messages')}
-              >{socialPanel === 'messages' ? '− HIDE MESSAGES' : '▤ MESSAGES'}</button>
+                aria-expanded={socialPanel}
+                onClick={() => setSocialPanel((current) => !current)}
+              >{socialPanel ? '− HIDE TABLE TALK' : '▤ TABLE TALK'}</button>
             </div>
-            {socialPanel === 'emotes' && (
-              <div className="emote-bar" aria-label="Send an emote">
-                {emoteOptions.map((option) => (
-                  <button
-                    key={option.name}
-                    type="button"
-                    aria-label={`Send ${option.label} emote`}
-                    title={option.label}
-                    disabled={sendingEmote || game.status !== 'playing' || game.paused}
-                    onClick={() => void sendEmote(option.name)}
-                  >
-                    {option.symbol}
-                  </button>
-                ))}
-              </div>
-            )}
-            {socialPanel === 'messages' && (
+            {socialPanel && (
               <div className="dialogue-bar" aria-label="Send table talk">
                 <div className="dialogue-presets">
                   {dialogueOptions.map((option) => (
