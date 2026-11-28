@@ -49,18 +49,25 @@ class RoomStore(ABC):
 class MemoryRoomStore(RoomStore):
     def __init__(self):
         self.data = {}
+        self.expirations = {}
         self.locks = {}
         self.emotes = {}
         self.presence = {}
 
     async def get(self, key):
+        expires_at = self.expirations.get(key)
+        if expires_at is not None and expires_at <= time.time():
+            await self.delete(key)
+            return None
         return self.data.get(key)
 
     async def set(self, key, value, ttl):
         self.data[key] = value
+        self.expirations[key] = time.time() + ttl
 
     async def delete(self, key):
         self.data.pop(key, None)
+        self.expirations.pop(key, None)
         self.emotes.pop(key, None)
         self.presence.pop(key, None)
 

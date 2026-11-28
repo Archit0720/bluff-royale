@@ -342,8 +342,8 @@ The backend does.
        │           │
        ▼           ▼
 ┌──────────┐  ┌──────────────┐
-│  Redis   │  │  PostgreSQL  │
-│          │  │              │
+│ Memory / │  │  PostgreSQL  │
+│  Redis   │  │              │
 │ Live     │  │ Match        │
 │ Games    │  │ History      │
 └──────────┘  └──────────────┘
@@ -391,8 +391,8 @@ The engine independently determines the result.
 
 | Technology | Purpose |
 |---|---|
-| Redis | Active multiplayer game state |
-| Upstash Redis | Production Redis hosting |
+| In-memory store | Default active multiplayer game state (single backend instance) |
+| Redis / Upstash | Optional shared active game state |
 | PostgreSQL | Permanent match history |
 | Neon | Production PostgreSQL hosting |
 | SQLAlchemy | Database abstraction / ORM |
@@ -404,8 +404,8 @@ The engine independently determines the result.
 |---|---|
 | Git | Version control |
 | GitHub | Source hosting |
-| Docker | Local Redis infrastructure |
-| Docker Compose | Local service orchestration |
+| Docker | Optional local Redis infrastructure |
+| Docker Compose | Optional local service orchestration |
 | pytest | Backend testing |
 
 ---
@@ -465,34 +465,14 @@ Install:
 - Python 3.11+
 - Node.js
 - npm
-- Docker
-- Docker Compose
 
 ---
 
-## 1. Start Redis
-
-From the backend directory:
-
-```bash
-docker compose up -d
-```
-
-Verify:
-
-```bash
-docker compose exec redis redis-cli ping
-```
-
-Expected:
-
-```text
-PONG
-```
+In-memory room storage is enabled by default. To use Redis instead, start a Redis service and set `USE_MEMORY_STORE=false` and `REDIS_URL`.
 
 ---
 
-## 2. Start the Backend
+## Start the Backend
 
 ```bash
 cd backend
@@ -524,7 +504,7 @@ DATABASE_URL=sqlite:///./bluff_history.db
 
 TURN_SECONDS=40
 ROOM_TTL_SECONDS=86400
-USE_MEMORY_STORE=false
+USE_MEMORY_STORE=true
 
 FRONTEND_URL=http://localhost:5173
 ```
@@ -586,7 +566,7 @@ Bluff Royale is designed to run entirely on free-tier-friendly infrastructure.
                      │
             ┌────────┴────────┐
             ▼                 ▼
-       Upstash Redis      Neon Postgres
+      Instance Memory    Neon Postgres
             │                 │
        Active Rooms       Match History
 ```
@@ -597,7 +577,7 @@ Bluff Royale is designed to run entirely on free-tier-friendly infrastructure.
 |---|---|
 | Frontend | Vercel |
 | Backend | Render |
-| Live Game State | Upstash Redis |
+| Live Game State | Render instance memory by default; optional Upstash Redis |
 | Match History | Neon PostgreSQL |
 | Source | GitHub |
 
@@ -653,13 +633,13 @@ Secrets are not intended to be committed to source control.
 
 ---
 
-# 💾 Redis vs PostgreSQL
+# 💾 Live Room State vs Match History
 
-Bluff Royale deliberately uses two different storage models.
+Bluff Royale separates temporary live rooms from persistent match history.
 
-## Redis
+## Live room state
 
-Optimized for temporary, rapidly changing multiplayer state:
+In-memory storage is the default and keeps temporary multiplayer state in the running backend process:
 
 ```text
 Room
@@ -674,6 +654,8 @@ Timer state
 Pause state
 Finishing order
 ```
+
+This requires a single backend instance; rooms are lost when that process restarts. Redis is available as an optional shared store when persistence across restarts or multiple instances is needed.
 
 ## PostgreSQL
 
@@ -691,7 +673,7 @@ Room identifier
 In other words:
 
 ```text
-Redis = what is happening now.
+Memory (or Redis) = what is happening now.
 
 PostgreSQL = what happened before.
 ```
@@ -708,7 +690,7 @@ Player A
 FastAPI
    │
    ├── Generate room code
-   └── Store room in Redis
+   └── Store room in memory (or Redis when configured)
 
 
 Player B
@@ -888,7 +870,7 @@ $0 infrastructure
 +
 real public deployment
 +
-real Redis
+in-memory multiplayer
 +
 real PostgreSQL
 +
@@ -925,7 +907,7 @@ That's where Bluff Royale lives.
 
 ### TRUST NOBODY. REMEMBER EVERYTHING.
 
-**React · TypeScript · FastAPI · Redis · PostgreSQL**
+**React · TypeScript · FastAPI · PostgreSQL**
 
 Built by **Archit Dogra**
 

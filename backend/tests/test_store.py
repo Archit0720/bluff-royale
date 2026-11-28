@@ -13,5 +13,7 @@ async def test_memory_store():
  await s.mark_left('A','p1')
  await s.touch_presence('A','p1')
  assert(await s.room_presence('A'))['p1']=='left'
+ await s.set('expired',{'x':1},0)
+ assert await s.get('expired') is None
  await s.delete('A')
  assert await s.room_presence('A')=={}

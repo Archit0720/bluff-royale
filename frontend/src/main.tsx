@@ -148,6 +148,7 @@ function App() {
   const [sendingEmote, setSendingEmote] = useState(false);
   const [sendingDialogue, setSendingDialogue] = useState(false);
   const [customDialogue, setCustomDialogue] = useState('');
+  const [socialPanel, setSocialPanel] = useState<'emotes' | 'messages' | null>(null);
   const [announcement, setAnnouncement] = useState<any>(null);
   const [sound, setSound] = useState(localStorage.getItem('br_sound') !== 'off');
   const [motion, setMotion] = useState(localStorage.getItem('br_motion') !== 'off');
@@ -259,7 +260,7 @@ function App() {
     refresh().catch((cause) => void handleRequestError(cause));
     const interval = window.setInterval(() => {
       refresh().catch((cause) => void handleRequestError(cause));
-    }, 700);
+    }, 1000);
     return () => window.clearInterval(interval);
   }, [session?.gameId, session?.playerId, screen]);
 
@@ -701,8 +702,8 @@ function App() {
       { name: 'shrug', symbol: '🤷', label: 'Shrug' },
     ];
     const recentEmotes = (room?.recent_emotes || [])
-      .filter((item: any) => Date.now() / 1000 - item.created_at < 5)
-      .slice(0, 4)
+      .filter((item: any) => Date.now() / 1000 - item.created_at < 30)
+      .slice(0, 5)
       .reverse();
     const tableAnnouncement = announcement && describeEvent(announcement, game.players);
     const toggleCard = (index: number) => setSelected((current) =>
@@ -720,22 +721,6 @@ function App() {
         {tableAnnouncement && (
           <div className={`table-announcement${tableAnnouncement.result ? ' result' : ''}`} role="status" aria-live="polite">
             <b>{tableAnnouncement.title}</b><span>{tableAnnouncement.detail}</span>
-          </div>
-        )}
-        {recentEmotes.length > 0 && (
-          <div className="emote-feed" aria-live="polite">
-            {recentEmotes.map((item: any) => (
-              <span key={`${item.player_id}-${item.created_at}`} className={item.kind === 'dialogue' ? 'dialogue-reaction' : item.kind === 'system' ? 'system-reaction' : 'emote-reaction'}>
-                {item.kind === 'dialogue'
-                  ? dialogueOptions.find((option) => option.name === item.dialogue)?.label
-                  : item.kind === 'custom'
-                    ? item.custom_text
-                  : item.kind === 'system' && item.system_event === 'leave'
-                    ? 'LEFT THE TABLE'
-                    : emoteOptions.find((option) => option.name === item.emote)?.symbol}
-                <small>{game.players.find((player: any) => player.id === item.player_id)?.name || 'Player'}</small>
-              </span>
-            ))}
           </div>
         )}
         <section className="hud">
@@ -756,45 +741,79 @@ function App() {
             {game.available_actions.includes('skip') && <button className="skip" disabled={game.paused} onClick={() => void run(() => api.skip(session.gameId, session.playerId))}>SKIP</button>}
             {game.available_actions.includes('close_round') && <button className="skip" disabled={game.paused} onClick={() => void run(() => api.closeRound(session.gameId, session.playerId))}>CLOSE ROUND</button>}
           </div>
-          <div className="emote-bar" aria-label="Send an emote">
-            <span>EMOTES</span>
-            {emoteOptions.map((option) => (
-              <button
-                key={option.name}
-                type="button"
-                aria-label={`Send ${option.label} emote`}
-                title={option.label}
-                disabled={sendingEmote || game.status !== 'playing' || game.paused}
-                onClick={() => void sendEmote(option.name)}
-              >
-                {option.symbol}
-              </button>
-            ))}
-          </div>
-          <div className="dialogue-bar" aria-label="Send table talk">
-            <span>TABLE TALK</span>
-            <div className="dialogue-presets">
-              {dialogueOptions.map((option) => (
-                <button key={option.name} type="button" disabled={sendingDialogue || game.paused} onClick={() => void sendDialogue({ dialogue: option.name })}>{option.label}</button>
-              ))}
+          <section className="table-chat" aria-label="Table chat and reactions">
+            <div className="table-chat-heading"><b>TABLE CHAT</b><span>LAST FIVE</span></div>
+            <div className="table-chat-feed" aria-live="polite" aria-relevant="additions text">
+              {recentEmotes.length ? recentEmotes.map((item: any) => {
+                const text = item.kind === 'dialogue'
+                  ? dialogueOptions.find((option) => option.name === item.dialogue)?.label
+                  : item.kind === 'custom'
+                    ? item.custom_text
+                    : item.kind === 'system' && item.system_event === 'leave'
+                      ? 'LEFT THE TABLE'
+                      : emoteOptions.find((option) => option.name === item.emote)?.symbol;
+                return (
+                  <div key={`${item.player_id}-${item.created_at}`} className="table-chat-message">
+                    <b>{game.players.find((player: any) => player.id === item.player_id)?.name || 'Player'}</b>
+                    <span>{text || 'Reacted'}</span>
+                  </div>
+                );
+              }) : <p className="table-chat-empty">No recent messages or reactions.</p>}
             </div>
-            <form className="custom-dialogue" onSubmit={(event) => {
-              event.preventDefault();
-              const text = customDialogue.trim();
-              if (text) void sendDialogue({ custom_text: text });
-            }}>
-              <input
-                aria-label="Write custom table talk"
-                placeholder="Write your own line…"
-                maxLength={120}
-                value={customDialogue}
-                disabled={sendingDialogue || game.paused}
-                onChange={(event) => setCustomDialogue(event.target.value)}
-              />
-              <button type="submit" disabled={sendingDialogue || game.paused || !customDialogue.trim()}>SEND</button>
-              <small>{customDialogue.length}/120</small>
-            </form>
-          </div>
+            <div className="social-shortcuts">
+              <button
+                type="button"
+                aria-expanded={socialPanel === 'emotes'}
+                onClick={() => setSocialPanel((current) => current === 'emotes' ? null : 'emotes')}
+              >{socialPanel === 'emotes' ? '− HIDE EMOTES' : '☺ EMOTES'}</button>
+              <button
+                type="button"
+                aria-expanded={socialPanel === 'messages'}
+                onClick={() => setSocialPanel((current) => current === 'messages' ? null : 'messages')}
+              >{socialPanel === 'messages' ? '− HIDE MESSAGES' : '▤ MESSAGES'}</button>
+            </div>
+            {socialPanel === 'emotes' && (
+              <div className="emote-bar" aria-label="Send an emote">
+                {emoteOptions.map((option) => (
+                  <button
+                    key={option.name}
+                    type="button"
+                    aria-label={`Send ${option.label} emote`}
+                    title={option.label}
+                    disabled={sendingEmote || game.status !== 'playing' || game.paused}
+                    onClick={() => void sendEmote(option.name)}
+                  >
+                    {option.symbol}
+                  </button>
+                ))}
+              </div>
+            )}
+            {socialPanel === 'messages' && (
+              <div className="dialogue-bar" aria-label="Send table talk">
+                <div className="dialogue-presets">
+                  {dialogueOptions.map((option) => (
+                    <button key={option.name} type="button" disabled={sendingDialogue || game.paused} onClick={() => void sendDialogue({ dialogue: option.name })}>{option.label}</button>
+                  ))}
+                </div>
+                <form className="custom-dialogue" onSubmit={(event) => {
+                  event.preventDefault();
+                  const text = customDialogue.trim();
+                  if (text) void sendDialogue({ custom_text: text });
+                }}>
+                  <input
+                    aria-label="Write custom table talk"
+                    placeholder="Write your own line…"
+                    maxLength={120}
+                    value={customDialogue}
+                    disabled={sendingDialogue || game.paused}
+                    onChange={(event) => setCustomDialogue(event.target.value)}
+                  />
+                  <button type="submit" disabled={sendingDialogue || game.paused || !customDialogue.trim()}>SEND</button>
+                  <small>{customDialogue.length}/120</small>
+                </form>
+              </div>
+            )}
+          </section>
           {error && <div className="err" role="alert">{error}</div>}
         </section>
         {game.paused && (
